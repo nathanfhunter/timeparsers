@@ -1,0 +1,25 @@
+Name:                timeparser
+Version:             0.1
+Synopsis:            Efficient Attoparsec parsers that handle multiple Date/Time formats.
+-- Description:
+License:             BSD3
+License-file:        LICENSE
+Author:              Nathan Ferris Hunter
+Maintainer:          nathan.f.hunter@gmail.com
+Copyright:           Nathan Ferris Hunter, 2011
+Category:            Data
+Build-type:          Simple
+-- Extra-source-files:
+Cabal-version:       >=1.2
+
+
+Library
+  Exposed-modules:
+        Data.Time.Parsers
+  Build-depends:
+        base,
+        bytestring,
+        attoparsec,
+        time,
+        mtl,
+        convertible
