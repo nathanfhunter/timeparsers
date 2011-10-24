@@ -4,6 +4,7 @@
 
 module Data.Time.Parsers.Types where
 
+import Data.Attoparsec.FastSet     (FastSet)
 import Data.Convertible
 import Data.Convertible.Instances()
 import Data.Time
@@ -39,9 +40,9 @@ data Options = Options { formats       :: [DateFormat]
                        , makeRecent    :: Bool
                        , minDate       :: Maybe Day
                        , maxDate       :: Maybe Day
-                       , seps          :: String
+                       , seps          :: FastSet
                        }
 
-data DateToken = Year Integer |
+data DateToken = Year Integer  |
                  Month Integer |
                  Any Integer deriving (Eq, Show)

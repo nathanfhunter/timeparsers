@@ -7,6 +7,7 @@ import Data.Time.Parsers.Util
 import Control.Applicative                  ((<$>),(<*>),(<|>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8                as A
+import Data.Attoparsec.FastSet
 import Data.Time
 import qualified Data.ByteString.Char8      as B
 
@@ -16,8 +17,8 @@ count2 = Any . read <$> count 2 digit
 count4 :: Parser DateToken
 count4 = Year . read <$> count 4 digit
 
-parseDateToken :: String -> Parser DateToken
-parseDateToken seps' = readDateToken =<< (takeTill $ inClass seps')
+parseDateToken :: FastSet -> Parser DateToken
+parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
 
 fourTwoTwo :: ReaderT Options Parser Day
 fourTwoTwo = lift fourTwoTwo'
@@ -46,10 +47,10 @@ charSeparated = do
     m <- asks makeRecent
     lift $ charSeparated' s f m
 
-charSeparated' :: String -> [DateFormat] -> Bool -> Parser Day
+charSeparated' :: FastSet -> [DateFormat] -> Bool -> Parser Day
 charSeparated' seps' formats' makeRecent' = do
     a   <- parseDateToken seps'
-    sep <- satisfy $ inClass seps'
+    sep <- satisfy $ flip memberChar seps'
     b   <- parseDateToken seps'
     _   <- satisfy (==sep)
     c   <- readDateToken =<< A.takeWhile isDigit
@@ -67,7 +68,7 @@ yearDayOfYear = do
     m <- asks makeRecent
     lift $ yearDayOfYear' s m
 
-yearDayOfYear' :: String -> Bool -> Parser Day
+yearDayOfYear' :: FastSet -> Bool -> Parser Day
 yearDayOfYear' seps' makeRecent' = do
     year <- (parseDateToken seps' >>= getYear)
     lastDay <- return $ if isLeapYear' year then 366 else 365
@@ -75,7 +76,7 @@ yearDayOfYear' seps' makeRecent' = do
     days <- (decimal >>= \x -> if x <= lastDay then return x else mzero)
     return $ addDays days year
   where
-    separator = satisfy $ inClass seps'
+    separator = satisfy $ flip memberChar seps'
     getYear (Year y) = return $ fromGregorian y 0 0
     getYear (Any y)  = return . (if makeRecent' then forceRecent else id) $
                        fromGregorian y 0 0
@@ -95,7 +96,7 @@ fullDate = asks makeRecent >>= lift . fullDate'
 fullDate' :: Bool -> Parser Day
 fullDate' makeRecent' = do
     month <- maybe mzero (return . Month) <$>
-             namedMonth =<< (A.takeWhile $ inClass "a-zA-Z")
+             namedMonth =<< (A.takeWhile isAlpha_ascii)
     _ <- space
     day <- Any . read . B.unpack <$> A.takeWhile isDigit
     _ <- string ", "
@@ -109,7 +110,7 @@ fullDate' makeRecent' = do
     noYear _        = True
 
 defaultOptions :: Options
-defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing ". /-"
+defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing (set ". /-")
 
 defaultParser :: ReaderT Options Parser Day
 defaultParser = charSeparated <|>
