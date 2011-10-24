@@ -1,9 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module Data.Time.Parsers.Types where
 
@@ -38,16 +35,13 @@ instance Convertible DateTime POSIXTime where
 
 data DateFormat = YMD | MDY | DMY deriving (Eq, Show)
 
-data Dates m = Dates { ymd :: m Day
-                     , mdy :: m Day
-                     , dmy :: m Day
-                     }
-deriving instance Show (m Day) => Show (Dates m)
-deriving instance Eq (m Day) => Eq (Dates m)
-
-data Options = Options { strict     :: Bool
-                       , format     :: DateFormat
-                       , makeRecent :: Bool
-                       , minDate    :: Day
-                       , maxDate    :: Day
+data Options = Options { formats       :: [DateFormat]
+                       , makeRecent    :: Bool
+                       , minDate       :: Maybe Day
+                       , maxDate       :: Maybe Day
+                       , seps          :: String
                        }
+
+data DateToken = Year Integer |
+                 Month Integer |
+                 Any Integer deriving (Eq, Show)
