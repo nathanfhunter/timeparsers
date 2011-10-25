@@ -79,7 +79,7 @@ fullDate = asks makeRecent >>= lift . fullDate'
 fullDate' :: Bool -> Parser Day
 fullDate' makeRecent' = do
     month <- maybe mzero (return . Month) <$>
-             namedMonth =<< (A.takeWhile isAlpha_ascii)
+             lookupMonth =<< (A.takeWhile isAlpha_ascii)
     _ <- space
     day <- Any . read . B.unpack <$> A.takeWhile isDigit
     _ <- string ", "
@@ -168,22 +168,39 @@ timezone :: ReaderT Options Parser TimeZone
 timezone = lift timezone'
 
 timezone' :: Parser TimeZone
-timezone' =  char 'Z' >> return utc <|> ((plus <|> minus) <*> timezone'')
+timezone' =  (char 'Z' >> return utc) <|> ((plus <|> minus) <*> timezone'')
   where
     plus  = char '+' >> return minutesToTimeZone
     minus = char '-' >> return (minutesToTimeZone . negate)
-    hour p = (60*) <$> p
-    minute  p = option () (char ':' >> return ()) >> p
+    hour p = p >>= (\n -> if (n < 12) then (return $ 60*n) else mzero)
+    minute  p = option () (char ':' >> return ()) >> p >>=
+                (\n -> if (n < 60) then return n else mzero)
     timezone'' = choice [ (+) <$> (hour $ nDigit 2) <*> (minute $ nDigit 2)
                         , (+) <$> (hour $ nDigit 1) <*> (minute $ nDigit 2)
                         , hour $ nDigit 2
                         , hour $ nDigit 1
                         ]
 
+namedTimezone :: ReaderT Options Parser TimeZone
+namedTimezone = asks australianTimezones >>= lift . namedTimezone'
+
+namedTimezone' :: Bool -> Parser TimeZone
+namedTimezone' aussie = (lookup' <$> A.takeWhile isAlpha_ascii) >>=
+                        maybe (fail "Invalid Timezone") return
+  where
+    lookup' = if aussie then lookupAusTimezone else lookupTimezone
+
 --Defaults and Debugging
 
 defaultOptions :: Options
-defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing (set ". /-") False
+defaultOptions = Options { formats = [YMD,DMY,MDY]
+                         , makeRecent = True
+                         , minDate = Nothing
+                         , maxDate = Nothing
+                         , seps = (set ". /-")
+                         , allowLeapSeconds = False
+                         , australianTimezones = False
+                         }
 
 defaultDate :: ReaderT Options Parser Day
 defaultDate = charSeparated <|>
@@ -197,7 +214,7 @@ defaultTime :: ReaderT Options Parser TimeOfDay
 defaultTime = twelveHour <|> twentyFourHour
 
 defaultTimeZone :: ReaderT Options Parser TimeZone
-defaultTimeZone = timezone
+defaultTimeZone = timezone <|> namedTimezone
 
 debugParse :: Options -> ReaderT Options Parser a ->
               B.ByteString -> Result a

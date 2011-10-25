@@ -6,21 +6,30 @@ module Data.Time.Parsers.Util where
 import Data.Time.Parsers.Tables
 import Data.Time.Parsers.Types
 
+import Control.Applicative               ((<|>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8             (isDigit)
 import qualified Data.ByteString.Char8   as B
-import Data.Char                         (toLower)
+import Data.Char                         (toLower, toUpper)
 import Data.Map                          as M
 import Data.Time.Calendar
+import Data.Time.LocalTime               (TimeZone)
 
-namedMonth :: B.ByteString -> Maybe Integer
-namedMonth = flip M.lookup months . B.map toLower
+lookupMonth :: B.ByteString -> Maybe Integer
+lookupMonth = flip M.lookup months . B.map toLower
+
+lookupTimezone :: B.ByteString -> Maybe TimeZone
+lookupTimezone = flip M.lookup timezones . B.map toUpper
+
+lookupAusTimezone :: B.ByteString -> Maybe TimeZone
+lookupAusTimezone bs = M.lookup (B.map toUpper bs) ausTimezones  <|>
+                       lookupTimezone bs
 
 readDateToken :: forall (m :: * -> *). Monad m => B.ByteString -> m DateToken
 readDateToken bs |notDigits bs     = maybe (fail $ "Invalid DateToken" ++
                                                    (B.unpack bs))
                                            (return . Month)
-                                           (namedMonth bs)
+                                           (lookupMonth bs)
                  |B.length bs >= 3 = returnRead Year bs
                  |otherwise        = returnRead Any $ bs
   where

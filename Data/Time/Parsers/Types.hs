@@ -36,12 +36,13 @@ instance Convertible DateTime POSIXTime where
 
 data DateFormat = YMD | MDY | DMY deriving (Eq, Show)
 
-data Options = Options { formats          :: [DateFormat]
-                       , makeRecent       :: Bool
-                       , minDate          :: Maybe Day
-                       , maxDate          :: Maybe Day
-                       , seps             :: FastSet
-                       , allowLeapSeconds :: Bool
+data Options = Options { formats             :: [DateFormat]
+                       , makeRecent          :: Bool
+                       , minDate             :: Maybe Day
+                       , maxDate             :: Maybe Day
+                       , seps                :: FastSet
+                       , allowLeapSeconds    :: Bool
+                       , australianTimezones :: Bool
                        }
 
 data DateToken = Year Integer  |
