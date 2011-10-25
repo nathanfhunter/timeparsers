@@ -8,7 +8,8 @@ import Control.Applicative                  ((<$>),(<*>),(<|>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8                as A
 import Data.Attoparsec.FastSet
-import Data.Time
+import Data.Fixed
+import Data.Time                            hiding (parseTime)
 import qualified Data.ByteString.Char8      as B
 
 count2 :: Parser DateToken
@@ -65,23 +66,15 @@ charSeparated' seps' formats' makeRecent' = do
 yearDayOfYear :: ReaderT Options Parser Day
 yearDayOfYear = do
     s <- asks seps
-    m <- asks makeRecent
-    lift $ yearDayOfYear' s m
+    lift $ yearDayOfYear' s
 
-yearDayOfYear' :: FastSet -> Bool -> Parser Day
-yearDayOfYear' seps' makeRecent' = do
-    year <- (parseDateToken seps' >>= getYear)
-    lastDay <- return $ if isLeapYear' year then 366 else 365
-    _ <- separator
-    days <- (decimal >>= \x -> if x <= lastDay then return x else mzero)
-    return $ addDays days year
+yearDayOfYear' :: FastSet -> Parser Day
+yearDayOfYear' seps' = do
+    year <- read <$> count 4 digit
+    day  <- fmap read $ maybeSep >> count 3 digit
+    yearDayToDate year day
   where
-    separator = satisfy $ flip memberChar seps'
-    getYear (Year y) = return $ fromGregorian y 0 0
-    getYear (Any y)  = return . (if makeRecent' then forceRecent else id) $
-                       fromGregorian y 0 0
-    getYear _        = fail "Invalid Year"
-    isLeapYear' day  = (\(y,_,_) -> isLeapYear y) $ toGregorian day
+    maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
 
 julianDay :: ReaderT Options Parser Day
 julianDay = lift julianDay'
@@ -109,8 +102,85 @@ fullDate' makeRecent' = do
     noYear (Year _) = False
     noYear _        = True
 
+parsePico :: Parser Pico
+parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
+  where
+  postradix = do
+    _ <- char '.'
+    bs <- A.takeWhile isDigit
+    let i = fromInteger . read . B.unpack $ bs
+        l = B.length bs
+    return (i/10^l)
+
+twelveHour :: ReaderT Options Parser TimeOfDay
+twelveHour = do leapSec <- asks allowLeapSeconds
+                th <- lift twelveHour'
+                let seconds = timeOfDayToTime th
+                if (not leapSec && seconds >= 86400)
+                then mzero
+                else return th
+
+
+twelveHour' :: Parser TimeOfDay
+twelveHour' = do
+    h' <- read <$> (count 2 digit <|> count 1 digit)
+    m  <- option 0 $ char ':' >> read <$> count 2 digit
+    s  <- option 0 $ char ':' >> parsePico
+    ampm <- skipSpace >> (string "AM" <|> string "PM")
+    h <- case ampm of
+      "AM" -> make24 False h'
+      "PM" -> make24 True h'
+      _    -> fail "Should be impossible."
+    maybe (fail "Invalid Time Range") return $
+      makeTimeOfDayValid h m s
+  where
+    make24 pm h = case compare h 12 of
+        LT -> return $ if pm then (h+12) else h
+        EQ -> return $ if pm then 12 else 0
+        GT -> mzero
+
+twentyFourHour :: ReaderT Options Parser TimeOfDay
+twentyFourHour = do leapSec <- asks allowLeapSeconds
+                    tfh <- lift twentyFourHour'
+                    let seconds = timeOfDayToTime tfh
+                    if (not leapSec && seconds >= 86400)
+                    then mzero
+                    else return tfh
+
+twentyFourHour' :: Parser TimeOfDay
+twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
+                  (colon <|> nocolon)
+  where
+    colon = makeTimeOfDayValid <$>
+            (read <$> (count 2 digit <|> count 1 digit)) <*>
+            (char ':' >> time2) <*>
+            (option 0 $ char ':' >> parsePico)
+    nocolon = makeTimeOfDayValid <$>
+              time2 <*>
+              option 0 time2 <*>
+              option 0 parsePico
+    time2 = read <$> count 2 digit
+
+timezone :: ReaderT Options Parser TimeZone
+timezone = lift timezone'
+
+timezone' :: Parser TimeZone
+timezone' = (plus <|> minus) <*> timezone''
+  where
+    plus = char '+' >> return minutesToTimeZone
+    minus = char '-' >> return (minutesToTimeZone . negate)
+    two = read <$> count 2 digit
+    one = read <$> count 1 digit
+    hour p = (60*) <$> p
+    minute p = option () (char ':' >> return ()) >> p
+    timezone'' = choice [ (+) <$> hour two <*> minute two
+                        , (+) <$> hour one <*> minute two
+                        , hour two
+                        , hour one
+                        ]
+
 defaultOptions :: Options
-defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing (set ". /-")
+defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing (set ". /-") False
 
 defaultParser :: ReaderT Options Parser Day
 defaultParser = charSeparated <|>
@@ -118,6 +188,6 @@ defaultParser = charSeparated <|>
                 twoTwoTwo <|>
                 twoTwoFour
 
-parseDate :: Options -> ReaderT Options Parser Day ->
-             B.ByteString -> Result Day
-parseDate opt p = flip feed B.empty . parse (runReaderT p opt)
+debugParse :: Options -> ReaderT Options Parser a ->
+              B.ByteString -> Result a
+debugParse opt p = flip feed B.empty . parse (runReaderT p opt)

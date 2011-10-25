@@ -78,3 +78,12 @@ forceRecent day | y < 100 && y <= 70 = addGregorianYearsClip 2000 day
 tryFormats :: forall (m :: * -> *). MonadPlus m =>
               [DateFormat] -> (DateFormat -> m Day) -> m Day
 tryFormats fs d = (msum $ Prelude.map d fs)
+
+yearDayToDate :: forall (m:: * -> *). Monad m =>
+                 Integer -> Integer -> m Day
+yearDayToDate year day = if (day <= lastDay && day > 1)
+                         then return . addDays (day - 1) $
+                              fromGregorian year 0 0
+                         else fail "Invalid Day of Year"
+  where
+    lastDay = if isLeapYear year then 366 else 365

@@ -1,7 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Data.Time.Parsers.Tables (months) where
 
 import Data.Map
-import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (ByteString)
 
 months :: Map ByteString Integer
 months = fromList [ ("january", 1),   ("jan", 1)
