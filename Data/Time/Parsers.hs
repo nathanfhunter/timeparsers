@@ -12,27 +12,37 @@ import Data.Fixed
 import Data.Time                            hiding (parseTime)
 import qualified Data.ByteString.Char8      as B
 
+--Utility Parsers
+
+nDigit :: (Read a, Num a) => Int -> Parser a
+nDigit n = read <$> count n digit
+
 count2 :: Parser DateToken
-count2 = Any . read <$> count 2 digit
+count2 = Any <$> nDigit 2
 
 count4 :: Parser DateToken
-count4 = Year . read <$> count 4 digit
+count4 = Year <$> nDigit 4
+
+parsePico :: Parser Pico
+parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
+  where
+  postradix = do
+    _ <- char '.'
+    bs <- A.takeWhile isDigit
+    let i = fromInteger . read . B.unpack $ bs
+        l = B.length bs
+    return (i/10^l)
 
 parseDateToken :: FastSet -> Parser DateToken
 parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
+
+--Date Parsers
 
 fourTwoTwo :: ReaderT Options Parser Day
 fourTwoTwo = lift fourTwoTwo'
 
 fourTwoTwo' :: Parser Day
 fourTwoTwo' = ($ YMD) =<< (makeDate <$> count4 <*> count2 <*> count2)
-
-twoTwoFour :: ReaderT Options Parser Day
-twoTwoFour = (asks formats) >>= (lift . twoTwoFour')
-
-twoTwoFour' :: [DateFormat] -> Parser Day
-twoTwoFour' fs = tryFormats fs =<<
-                 (makeDate <$> count2 <*> count2 <*> count4)
 
 twoTwoTwo :: ReaderT Options Parser Day
 twoTwoTwo = (asks formats) >>= (lift . twoTwoTwo')
@@ -63,26 +73,6 @@ charSeparated' seps' formats' makeRecent' = do
     then return $ forceRecent date
     else return date
 
-yearDayOfYear :: ReaderT Options Parser Day
-yearDayOfYear = do
-    s <- asks seps
-    lift $ yearDayOfYear' s
-
-yearDayOfYear' :: FastSet -> Parser Day
-yearDayOfYear' seps' = do
-    year <- read <$> count 4 digit
-    day  <- fmap read $ maybeSep >> count 3 digit
-    yearDayToDate year day
-  where
-    maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
-
-julianDay :: ReaderT Options Parser Day
-julianDay = lift julianDay'
-
-julianDay' :: Parser Day
-julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
-             ModifiedJulianDay <$> signed decimal
-
 fullDate :: ReaderT Options Parser Day
 fullDate = asks makeRecent >>= lift . fullDate'
 
@@ -102,15 +92,27 @@ fullDate' makeRecent' = do
     noYear (Year _) = False
     noYear _        = True
 
-parsePico :: Parser Pico
-parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
+yearDayOfYear :: ReaderT Options Parser Day
+yearDayOfYear = do
+    s <- asks seps
+    lift $ yearDayOfYear' s
+
+yearDayOfYear' :: FastSet -> Parser Day
+yearDayOfYear' seps' = do
+    year <- nDigit 4
+    day  <- maybeSep >> nDigit 3
+    yearDayToDate year day
   where
-  postradix = do
-    _ <- char '.'
-    bs <- A.takeWhile isDigit
-    let i = fromInteger . read . B.unpack $ bs
-        l = B.length bs
-    return (i/10^l)
+    maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
+
+julianDay :: ReaderT Options Parser Day
+julianDay = lift julianDay'
+
+julianDay' :: Parser Day
+julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
+             ModifiedJulianDay <$> signed decimal
+
+--Time Parsers
 
 twelveHour :: ReaderT Options Parser TimeOfDay
 twelveHour = do leapSec <- asks allowLeapSeconds
@@ -123,8 +125,8 @@ twelveHour = do leapSec <- asks allowLeapSeconds
 
 twelveHour' :: Parser TimeOfDay
 twelveHour' = do
-    h' <- read <$> (count 2 digit <|> count 1 digit)
-    m  <- option 0 $ char ':' >> read <$> count 2 digit
+    h' <- (nDigit 2 <|> nDigit 1)
+    m  <- option 0 $ char ':' >> nDigit 2
     s  <- option 0 $ char ':' >> parsePico
     ampm <- skipSpace >> (string "AM" <|> string "PM")
     h <- case ampm of
@@ -152,41 +154,50 @@ twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
                   (colon <|> nocolon)
   where
     colon = makeTimeOfDayValid <$>
-            (read <$> (count 2 digit <|> count 1 digit)) <*>
-            (char ':' >> time2) <*>
+            (nDigit 2 <|> nDigit 1) <*>
+            (char ':' >> nDigit 2) <*>
             (option 0 $ char ':' >> parsePico)
     nocolon = makeTimeOfDayValid <$>
-              time2 <*>
-              option 0 time2 <*>
+              nDigit 2 <*>
+              option 0 (nDigit 2) <*>
               option 0 parsePico
-    time2 = read <$> count 2 digit
+
+--TimeZone Parsers
 
 timezone :: ReaderT Options Parser TimeZone
 timezone = lift timezone'
 
 timezone' :: Parser TimeZone
-timezone' = (plus <|> minus) <*> timezone''
+timezone' =  char 'Z' >> return utc <|> ((plus <|> minus) <*> timezone'')
   where
-    plus = char '+' >> return minutesToTimeZone
+    plus  = char '+' >> return minutesToTimeZone
     minus = char '-' >> return (minutesToTimeZone . negate)
-    two = read <$> count 2 digit
-    one = read <$> count 1 digit
     hour p = (60*) <$> p
-    minute p = option () (char ':' >> return ()) >> p
-    timezone'' = choice [ (+) <$> hour two <*> minute two
-                        , (+) <$> hour one <*> minute two
-                        , hour two
-                        , hour one
+    minute  p = option () (char ':' >> return ()) >> p
+    timezone'' = choice [ (+) <$> (hour $ nDigit 2) <*> (minute $ nDigit 2)
+                        , (+) <$> (hour $ nDigit 1) <*> (minute $ nDigit 2)
+                        , hour $ nDigit 2
+                        , hour $ nDigit 1
                         ]
+
+--Defaults and Debugging
 
 defaultOptions :: Options
 defaultOptions = Options [YMD,DMY,MDY] True Nothing Nothing (set ". /-") False
 
-defaultParser :: ReaderT Options Parser Day
-defaultParser = charSeparated <|>
-                fourTwoTwo <|>
-                twoTwoTwo <|>
-                twoTwoFour
+defaultDate :: ReaderT Options Parser Day
+defaultDate = charSeparated <|>
+              fourTwoTwo    <|>
+              twoTwoTwo     <|>
+              fullDate      <|>
+              yearDayOfYear <|>
+              julianDay
+
+defaultTime :: ReaderT Options Parser TimeOfDay
+defaultTime = twelveHour <|> twentyFourHour
+
+defaultTimeZone :: ReaderT Options Parser TimeZone
+defaultTimeZone = timezone
 
 debugParse :: Options -> ReaderT Options Parser a ->
               B.ByteString -> Result a
