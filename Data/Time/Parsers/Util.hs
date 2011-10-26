@@ -12,6 +12,7 @@ import Data.Attoparsec.Char8             (isDigit)
 import qualified Data.ByteString.Char8   as B
 import Data.Char                         (toLower, toUpper)
 import Data.Map                          as M
+import Data.Set                          as Set (member)
 import Data.Time.Calendar
 import Data.Time.LocalTime               (TimeZone)
 
@@ -96,3 +97,6 @@ yearDayToDate year day = if (day <= lastDay && day > 1)
                          else fail "Invalid Day of Year"
   where
     lastDay = if isLeapYear year then 366 else 365
+
+isFlagSet :: Flag -> DateParser Bool
+isFlagSet f = asks $ Set.member f . flags

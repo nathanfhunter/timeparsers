@@ -8,8 +8,9 @@ import Data.Time.Parsers.Util
 import Control.Applicative                  ((<$>),(<*>),(<|>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8                as A
-import Data.Attoparsec.FastSet
-import Data.Fixed
+import Data.Attoparsec.FastSet              (set, FastSet, memberChar)
+import Data.Fixed                           (Pico)
+import Data.Set                             (fromList)
 import Data.Time                            hiding (parseTime)
 import Data.Time.Clock.POSIX                (POSIXTime)
 import qualified Data.ByteString.Char8      as B
@@ -32,31 +33,31 @@ parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
 parseDateToken :: FastSet -> Parser DateToken
 parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
 
-onlyParse :: ReaderT Options Parser a -> ReaderT Options Parser a
+onlyParse :: DateParser a -> DateParser a
 onlyParse p = p >>= (\r -> lift endOfInput >> return r)
 
 --Date Parsers
 
-fourTwoTwo :: ReaderT Options Parser Day
+fourTwoTwo :: DateParser Day
 fourTwoTwo = lift fourTwoTwo'
 
 fourTwoTwo' :: Parser Day
 fourTwoTwo' = maybe (fail "Invalid Date Range") return =<<
               (fromGregorianValid <$> nDigit 4 <*> nDigit 2 <*> nDigit 2)
 
-twoTwoTwo :: ReaderT Options Parser Day
-twoTwoTwo = asks makeRecent >>= lift . twoTwoTwo'
+twoTwoTwo :: DateParser Day
+twoTwoTwo = isFlagSet MakeRecent >>= lift . twoTwoTwo'
 
 twoTwoTwo' :: Bool -> Parser Day
 twoTwoTwo' mr = fmap (if mr then forceRecent else id) $
                 maybe (fail "Invalid Date Range") return =<<
                 (fromGregorianValid <$> nDigit 2 <*> nDigit 2 <*> nDigit 2)
 
-charSeparated :: ReaderT Options Parser Day
+charSeparated :: DateParser Day
 charSeparated = do
     s <- asks seps
     f <- asks formats
-    m <- asks makeRecent
+    m <- isFlagSet MakeRecent
     lift $ charSeparated' s f m
 
 charSeparated' :: FastSet -> [DateFormat] -> Bool -> Parser Day
@@ -74,8 +75,8 @@ charSeparated' seps' formats' makeRecent' = do
     then return $ forceRecent date
     else return date
 
-fullDate :: ReaderT Options Parser Day
-fullDate = asks makeRecent >>= lift . fullDate'
+fullDate :: DateParser Day
+fullDate = isFlagSet MakeRecent >>= lift . fullDate'
 
 fullDate' :: Bool -> Parser Day
 fullDate' makeRecent' = do
@@ -93,7 +94,7 @@ fullDate' makeRecent' = do
     noYear (Year _) = False
     noYear _        = True
 
-yearDayOfYear :: ReaderT Options Parser Day
+yearDayOfYear :: DateParser Day
 yearDayOfYear = do
     s <- asks seps
     lift $ yearDayOfYear' s
@@ -106,7 +107,7 @@ yearDayOfYear' seps' = do
   where
     maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
 
-julianDay :: ReaderT Options Parser Day
+julianDay :: DateParser Day
 julianDay = lift julianDay'
 
 julianDay' :: Parser Day
@@ -115,8 +116,8 @@ julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
 
 --Time Parsers
 
-twelveHour :: ReaderT Options Parser TimeOfDay
-twelveHour = do leapSec <- asks allowLeapSeconds
+twelveHour :: DateParser TimeOfDay
+twelveHour = do leapSec <- isFlagSet AllowLeapSeconds
                 th <- lift twelveHour'
                 let seconds = timeOfDayToTime th
                 if (not leapSec && seconds >= 86400)
@@ -142,8 +143,8 @@ twelveHour' = do
         EQ -> return $ if pm then 12 else 0
         GT -> mzero
 
-twentyFourHour :: ReaderT Options Parser TimeOfDay
-twentyFourHour = do leapSec <- asks allowLeapSeconds
+twentyFourHour :: DateParser TimeOfDay
+twentyFourHour = do leapSec <- isFlagSet AllowLeapSeconds
                     tfh <- lift twentyFourHour'
                     let seconds = timeOfDayToTime tfh
                     if (not leapSec && seconds >= 86400)
@@ -165,7 +166,7 @@ twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
 
 --TimeZone Parsers
 
-offsetTimezone :: ReaderT Options Parser TimeZone
+offsetTimezone :: DateParser TimeZone
 offsetTimezone = lift offsetTimezone'
 
 offsetTimezone' :: Parser TimeZone
@@ -183,8 +184,8 @@ offsetTimezone' =  (char 'Z' >> return utc) <|>
                         , hour $ nDigit 1
                         ]
 
-namedTimezone :: ReaderT Options Parser TimeZone
-namedTimezone = asks australianTimezones >>= lift . namedTimezone'
+namedTimezone :: DateParser TimeZone
+namedTimezone = isFlagSet AustralianTimezones >>= lift . namedTimezone'
 
 namedTimezone' :: Bool -> Parser TimeZone
 namedTimezone' aussie = (lookup' <$> A.takeWhile isAlpha_ascii) >>=
@@ -194,8 +195,8 @@ namedTimezone' aussie = (lookup' <$> A.takeWhile isAlpha_ascii) >>=
 
 --Timestamp Parsers
 
-posixTime :: ReaderT Options Parser POSIXTime
-posixTime = asks requirePosixUnits >>= lift . posixTime'
+posixTime :: DateParser POSIXTime
+posixTime = isFlagSet RequirePosixUnit >>= lift . posixTime'
 
 posixTime' :: Bool -> Parser POSIXTime
 posixTime' requireS = realToFrac . readDouble . B.unpack <$>
@@ -208,10 +209,8 @@ posixTime' requireS = realToFrac . readDouble . B.unpack <$>
     readDouble :: String -> Double
     readDouble = read
 
-zonedTime :: ReaderT Options Parser Day ->
-             ReaderT Options Parser TimeOfDay ->
-             ReaderT Options Parser TimeZone ->
-             ReaderT Options Parser ZonedTime
+zonedTime :: DateParser Day -> DateParser TimeOfDay ->
+             DateParser TimeZone -> DateParser ZonedTime
 zonedTime date time timezone =
     ZonedTime <$>
     localTime date time <*>
@@ -219,20 +218,16 @@ zonedTime date time timezone =
   where
     maybeSpace = option undefined $ lift space
 
-localTime :: ReaderT Options Parser Day ->
-             ReaderT Options Parser TimeOfDay ->
-             ReaderT Options Parser LocalTime
-localTime date time = asks defaultToMidnight >>= localTime'
+localTime :: DateParser Day -> DateParser TimeOfDay -> DateParser LocalTime
+localTime date time = isFlagSet DefaultToMidnight >>= localTime'
   where
     localTime' b = LocalTime <$> date <*> time' b
     time' b = timeSep >> if b then (option midnight time) else time
     timeSep = lift $ char 'T' <|> space
 
 timestamp :: FromTimeStamp a =>
-             ReaderT Options Parser Day ->
-             ReaderT Options Parser TimeOfDay ->
-             ReaderT Options Parser TimeZone ->
-             ReaderT Options Parser a
+             DateParser Day -> DateParser TimeOfDay ->
+             DateParser TimeZone -> DateParser a
 timestamp date time timezone = choice [ fromTimeStamp . Zoned <$> zonedtime
                                       , fromTimeStamp . Local <$> localtime
                                       , fromTimeStamp . Local <$> day
@@ -248,17 +243,14 @@ timestamp date time timezone = choice [ fromTimeStamp . Zoned <$> zonedtime
 
 defaultOptions :: Options
 defaultOptions = Options { formats = [YMD,DMY,MDY]
-                         , makeRecent = True
-                         , minDate = Nothing
-                         , maxDate = Nothing
                          , seps = (set ". /-")
-                         , allowLeapSeconds = False
-                         , defaultToMidnight = True
-                         , requirePosixUnits = False
-                         , australianTimezones = False
+                         , flags = fromList [ MakeRecent
+                                            , DefaultToUTC
+                                            , DefaultToMidnight
+                                            ]
                          }
 
-defaultDate :: ReaderT Options Parser Day
+defaultDate :: DateParser Day
 defaultDate = charSeparated <|>
               fourTwoTwo    <|>
               yearDayOfYear <|>
@@ -266,18 +258,18 @@ defaultDate = charSeparated <|>
               fullDate      <|>
               julianDay
 
-defaultTime :: ReaderT Options Parser TimeOfDay
+defaultTime :: DateParser TimeOfDay
 defaultTime = twelveHour <|> twentyFourHour
 
-defaultTimeZone :: ReaderT Options Parser TimeZone
+defaultTimeZone :: DateParser TimeZone
 defaultTimeZone = offsetTimezone <|> namedTimezone
 
-defaultTimeStamp :: FromTimeStamp a => ReaderT Options Parser a
+defaultTimeStamp :: FromTimeStamp a => DateParser a
 defaultTimeStamp = onlyParse timestamp' <|>
                    (fromTimeStamp . Posix <$>  posixTime)
   where
     timestamp' = timestamp defaultDate defaultTime defaultTimeZone
 
-debugParse :: Options -> ReaderT Options Parser a ->
+debugParse :: Options -> DateParser a ->
               B.ByteString -> Result a
 debugParse opt p = flip feed B.empty . parse (runReaderT p opt)
