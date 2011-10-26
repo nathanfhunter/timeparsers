@@ -10,29 +10,38 @@ import Data.Convertible.Instances()
 import Data.Time
 import Data.Time.Clock.POSIX
 
-data DateTime = UTC UTCTime   |
-                ZT  ZonedTime |
-                PT  POSIXTime |
-                D   Day deriving (Show)
+data TimeStamp = Zoned ZonedTime |
+                 Local LocalTime |
+                 Posix POSIXTime deriving (Show)
 
-instance Convertible DateTime UTCTime where
-    safeConvert dt = case dt of
-        UTC u -> return u
-        ZT  z -> safeConvert z
-        PT  p -> safeConvert p
-        D   d -> return $ UTCTime d 0
-instance Convertible DateTime ZonedTime where
-    safeConvert dt = case dt of
-        UTC u -> safeConvert u
-        ZT  z -> return z
-        PT  p -> safeConvert p
-        D   d -> safeConvert $ UTCTime d 0
-instance Convertible DateTime POSIXTime where
-    safeConvert dt = case dt of
-        UTC u -> safeConvert u
-        ZT  z -> safeConvert z
-        PT  p -> return p
-        D   d -> safeConvert $ UTCTime d 0
+class FromTimeStamp a where
+    fromTimeStamp :: TimeStamp -> a
+
+instance FromTimeStamp LocalTime where
+    fromTimeStamp timestamp = case timestamp of
+        Zoned z -> zonedTimeToLocalTime z
+        Local l -> l
+        Posix p -> zonedTimeToLocalTime $ convert p
+instance FromTimeStamp UTCTime where
+    fromTimeStamp timestamp = case timestamp of
+        Zoned z -> zonedTimeToUTC z
+        Local l -> localTimeToUTC utc l
+        Posix p -> convert p
+instance FromTimeStamp ZonedTime where
+    fromTimeStamp timestamp = case timestamp of
+        Zoned z -> z
+        Local l -> ZonedTime l utc
+        Posix p -> convert p
+instance FromTimeStamp Day where
+    fromTimeStamp timestamp = case timestamp of
+        Zoned z -> localDay . zonedTimeToLocalTime $ z
+        Local l -> localDay l
+        Posix p -> utctDay $ convert p
+instance FromTimeStamp POSIXTime where
+    fromTimeStamp timestamp = case timestamp of
+        Zoned z -> convert z
+        Local l -> convert . localTimeToUTC utc $ l
+        Posix p -> p
 
 data DateFormat = YMD | MDY | DMY deriving (Eq, Show)
 
@@ -42,6 +51,8 @@ data Options = Options { formats             :: [DateFormat]
                        , maxDate             :: Maybe Day
                        , seps                :: FastSet
                        , allowLeapSeconds    :: Bool
+                       , defaultToMidnight   :: Bool
+                       , requirePosixUnits   :: Bool
                        , australianTimezones :: Bool
                        }
 
