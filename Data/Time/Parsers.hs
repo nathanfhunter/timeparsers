@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 module Data.Time.Parsers where
 
 import Data.Time.Parsers.Types

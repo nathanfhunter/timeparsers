@@ -1,0 +1,2 @@
+This package contains parsers for various date and time formats, implemented in
+Attoparsec.

@@ -1,6 +1,6 @@
-Name:                timeparser
+Name:                timeparsers
 Version:             0.1
-Synopsis:            Efficient Attoparsec parsers that handle multiple Date/Time formats.
+Synopsis:            Attoparsec parsers for various Date/Time formats.
 -- Description:
 License:             BSD3
 License-file:        LICENSE
@@ -22,4 +22,5 @@ Library
         attoparsec,
         time,
         mtl,
-        convertible
+        convertible,
+        containers
