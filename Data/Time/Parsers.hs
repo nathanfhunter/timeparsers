@@ -33,19 +33,19 @@ parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
 parseDateToken :: FastSet -> Parser DateToken
 parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
 
-onlyParse :: DateParser a -> DateParser a
+onlyParse :: OptionedParser a -> OptionedParser a
 onlyParse p = p >>= (\r -> lift endOfInput >> return r)
 
 --Date Parsers
 
-fourTwoTwo :: DateParser Day
+fourTwoTwo :: OptionedParser Day
 fourTwoTwo = lift fourTwoTwo'
 
 fourTwoTwo' :: Parser Day
 fourTwoTwo' = maybe (fail "Invalid Date Range") return =<<
               (fromGregorianValid <$> nDigit 4 <*> nDigit 2 <*> nDigit 2)
 
-twoTwoTwo :: DateParser Day
+twoTwoTwo :: OptionedParser Day
 twoTwoTwo = isFlagSet MakeRecent >>= lift . twoTwoTwo'
 
 twoTwoTwo' :: Bool -> Parser Day
@@ -53,7 +53,7 @@ twoTwoTwo' mr = fmap (if mr then forceRecent else id) $
                 maybe (fail "Invalid Date Range") return =<<
                 (fromGregorianValid <$> nDigit 2 <*> nDigit 2 <*> nDigit 2)
 
-charSeparated :: DateParser Day
+charSeparated :: OptionedParser Day
 charSeparated = do
     s <- asks seps
     f <- asks formats
@@ -75,7 +75,7 @@ charSeparated' seps' formats' makeRecent' = do
     then return $ forceRecent date
     else return date
 
-fullDate :: DateParser Day
+fullDate :: OptionedParser Day
 fullDate = isFlagSet MakeRecent >>= lift . fullDate'
 
 fullDate' :: Bool -> Parser Day
@@ -94,7 +94,7 @@ fullDate' makeRecent' = do
     noYear (Year _) = False
     noYear _        = True
 
-yearDayOfYear :: DateParser Day
+yearDayOfYear :: OptionedParser Day
 yearDayOfYear = do
     s <- asks seps
     lift $ yearDayOfYear' s
@@ -107,7 +107,7 @@ yearDayOfYear' seps' = do
   where
     maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
 
-julianDay :: DateParser Day
+julianDay :: OptionedParser Day
 julianDay = lift julianDay'
 
 julianDay' :: Parser Day
@@ -116,7 +116,7 @@ julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
 
 --Time Parsers
 
-twelveHour :: DateParser TimeOfDay
+twelveHour :: OptionedParser TimeOfDay
 twelveHour = do leapSec <- isFlagSet AllowLeapSeconds
                 th <- lift twelveHour'
                 let seconds = timeOfDayToTime th
@@ -143,7 +143,7 @@ twelveHour' = do
         EQ -> return $ if pm then 12 else 0
         GT -> mzero
 
-twentyFourHour :: DateParser TimeOfDay
+twentyFourHour :: OptionedParser TimeOfDay
 twentyFourHour = do leapSec <- isFlagSet AllowLeapSeconds
                     tfh <- lift twentyFourHour'
                     let seconds = timeOfDayToTime tfh
@@ -166,7 +166,7 @@ twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
 
 --TimeZone Parsers
 
-offsetTimezone :: DateParser TimeZone
+offsetTimezone :: OptionedParser TimeZone
 offsetTimezone = lift offsetTimezone'
 
 offsetTimezone' :: Parser TimeZone
@@ -184,7 +184,7 @@ offsetTimezone' =  (char 'Z' >> return utc) <|>
                         , hour $ nDigit 1
                         ]
 
-namedTimezone :: DateParser TimeZone
+namedTimezone :: OptionedParser TimeZone
 namedTimezone = isFlagSet AustralianTimezones >>= lift . namedTimezone'
 
 namedTimezone' :: Bool -> Parser TimeZone
@@ -195,7 +195,7 @@ namedTimezone' aussie = (lookup' <$> A.takeWhile isAlpha_ascii) >>=
 
 --Timestamp Parsers
 
-posixTime :: DateParser POSIXTime
+posixTime :: OptionedParser POSIXTime
 posixTime = isFlagSet RequirePosixUnit >>= lift . posixTime'
 
 posixTime' :: Bool -> Parser POSIXTime
@@ -209,8 +209,8 @@ posixTime' requireS = do
     readDouble :: String -> Double
     readDouble = read
 
-zonedTime :: DateParser Day -> DateParser TimeOfDay ->
-             DateParser TimeZone -> DateParser ZonedTime
+zonedTime :: OptionedParser Day -> OptionedParser TimeOfDay ->
+             OptionedParser TimeZone -> OptionedParser ZonedTime
 zonedTime date time timezone = do
     defaultToUTC <- isFlagSet DefaultToUTC
     let timezone'  = (option undefined $ lift space) >> timezone
@@ -219,7 +219,9 @@ zonedTime date time timezone = do
                      else timezone'
     ZonedTime <$> localTime date time <*> mtimezone
 
-localTime :: DateParser Day -> DateParser TimeOfDay -> DateParser LocalTime
+localTime :: OptionedParser Day ->
+             OptionedParser TimeOfDay ->
+             OptionedParser LocalTime
 localTime date time = do
     defaultToMidnight <- isFlagSet DefaultToMidnight
     let time' = (lift $ char 'T' <|> space) >> time
@@ -229,11 +231,11 @@ localTime date time = do
     LocalTime <$> date <*> mtime
 
 anyFromZoned :: FromZonedTime a =>
-                DateParser Day -> DateParser TimeOfDay ->
-                DateParser TimeZone -> DateParser a
+                OptionedParser Day -> OptionedParser TimeOfDay ->
+                OptionedParser TimeZone -> OptionedParser a
 anyFromZoned d t tz = fromZonedTime <$> zonedTime d t tz
 
-anyFromPosix :: FromZonedTime a => DateParser a
+anyFromPosix :: FromZonedTime a => OptionedParser a
 anyFromPosix = fromZonedTime . posixToZoned <$> posixTime
 
 --Defaults and Debugging
@@ -247,7 +249,7 @@ defaultOptions = Options { formats = [YMD,DMY,MDY]
                                             ]
                          }
 
-defaultDate :: DateParser Day
+defaultDate :: OptionedParser Day
 defaultDate = charSeparated <|>
               fourTwoTwo    <|>
               yearDayOfYear <|>
@@ -255,17 +257,17 @@ defaultDate = charSeparated <|>
               fullDate      <|>
               julianDay
 
-defaultTime :: DateParser TimeOfDay
+defaultTime :: OptionedParser TimeOfDay
 defaultTime = twelveHour <|> twentyFourHour
 
-defaultTimeZone :: DateParser TimeZone
+defaultTimeZone :: OptionedParser TimeZone
 defaultTimeZone = offsetTimezone <|> namedTimezone
 
-defaultTimeStamp :: FromZonedTime a => DateParser a
+defaultTimeStamp :: FromZonedTime a => OptionedParser a
 defaultTimeStamp = onlyParse anyFromZoned' <|> onlyParse anyFromPosix
   where
     anyFromZoned' = anyFromZoned defaultDate defaultTime defaultTimeZone
 
-debugParse :: Options -> DateParser a ->
+debugParse :: Options -> OptionedParser a ->
               B.ByteString -> Result a
 debugParse opt p = flip feed B.empty . parse (runReaderT p opt)

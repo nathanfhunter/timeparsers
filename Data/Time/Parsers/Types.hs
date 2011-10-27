@@ -49,7 +49,7 @@ data Options = Options { formats :: [DateFormat]
                        , flags   :: Set.Set Flag
                        }
 
-type DateParser a = ReaderT Options Parser a
+type OptionedParser a = ReaderT Options Parser a
 
 data DateToken = Year Integer  |
                  Month Integer |

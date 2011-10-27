@@ -101,7 +101,7 @@ yearDayToDate year day = if (day <= lastDay && day > 1)
   where
     lastDay = if isLeapYear year then 366 else 365
 
-isFlagSet :: Flag -> DateParser Bool
+isFlagSet :: Flag -> OptionedParser Bool
 isFlagSet f = asks $ Set.member f . flags
 
 posixToZoned :: POSIXTime -> ZonedTime
