@@ -199,45 +199,42 @@ posixTime :: DateParser POSIXTime
 posixTime = isFlagSet RequirePosixUnit >>= lift . posixTime'
 
 posixTime' :: Bool -> Parser POSIXTime
-posixTime' requireS = realToFrac . readDouble . B.unpack <$>
-                      if requireS then posixWithS else posixTime''
-  where
-    posixTime'' = (B.append) <$>
+posixTime' requireS = do
+    bytestring <- (B.append) <$>
                   (option "0" $ takeWhile1 isDigit) <*>
                   (option "" $ (B.cons) <$> char '.' <*> A.takeWhile isDigit)
-    posixWithS  = posixTime''>>=(\r -> char 's' >> return r)
+    when requireS $ char 's' >> return ()
+    return . realToFrac . readDouble . B.unpack $ bytestring
+  where
     readDouble :: String -> Double
     readDouble = read
 
 zonedTime :: DateParser Day -> DateParser TimeOfDay ->
              DateParser TimeZone -> DateParser ZonedTime
-zonedTime date time timezone =
-    ZonedTime <$>
-    localTime date time <*>
-    (maybeSpace >> timezone)
-  where
-    maybeSpace = option undefined $ lift space
+zonedTime date time timezone = do
+    defaultToUTC <- isFlagSet DefaultToUTC
+    let timezone'  = (option undefined $ lift space) >> timezone
+        mtimezone  = if defaultToUTC
+                     then (option utc timezone')
+                     else timezone'
+    ZonedTime <$> localTime date time <*> mtimezone
 
 localTime :: DateParser Day -> DateParser TimeOfDay -> DateParser LocalTime
-localTime date time = isFlagSet DefaultToMidnight >>= localTime'
-  where
-    localTime' b = LocalTime <$> date <*> time' b
-    time' b = timeSep >> if b then (option midnight time) else time
-    timeSep = lift $ char 'T' <|> space
+localTime date time = do
+    defaultToMidnight <- isFlagSet DefaultToMidnight
+    let time' = (lift $ char 'T' <|> space) >> time
+        mtime = if defaultToMidnight
+                then (option midnight time')
+                else time'
+    LocalTime <$> date <*> mtime
 
-timestamp :: FromTimeStamp a =>
-             DateParser Day -> DateParser TimeOfDay ->
-             DateParser TimeZone -> DateParser a
-timestamp date time timezone = choice [ fromTimeStamp . Zoned <$> zonedtime
-                                      , fromTimeStamp . Local <$> localtime
-                                      , fromTimeStamp . Local <$> day
-                                      ]
-  where
-    zonedtime = ZonedTime <$> localtime <*> timezone'
-    localtime = LocalTime <$> date <*> time'
-    day       = flip LocalTime midnight <$> date
-    time'     = lift (space <|> char 'T') >> time
-    timezone' = lift (option undefined space) >> timezone
+anyFromZoned :: FromZonedTime a =>
+                DateParser Day -> DateParser TimeOfDay ->
+                DateParser TimeZone -> DateParser a
+anyFromZoned d t tz = fromZonedTime <$> zonedTime d t tz
+
+anyFromPosix :: FromZonedTime a => DateParser a
+anyFromPosix = fromZonedTime . posixToZoned <$> posixTime
 
 --Defaults and Debugging
 
@@ -264,11 +261,10 @@ defaultTime = twelveHour <|> twentyFourHour
 defaultTimeZone :: DateParser TimeZone
 defaultTimeZone = offsetTimezone <|> namedTimezone
 
-defaultTimeStamp :: FromTimeStamp a => DateParser a
-defaultTimeStamp = onlyParse timestamp' <|>
-                   (fromTimeStamp . Posix <$>  posixTime)
+defaultTimeStamp :: FromZonedTime a => DateParser a
+defaultTimeStamp = onlyParse anyFromZoned' <|> onlyParse anyFromPosix
   where
-    timestamp' = timestamp defaultDate defaultTime defaultTimeZone
+    anyFromZoned' = anyFromZoned defaultDate defaultTime defaultTimeZone
 
 debugParse :: Options -> DateParser a ->
               B.ByteString -> Result a

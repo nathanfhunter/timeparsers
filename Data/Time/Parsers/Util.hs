@@ -11,10 +11,13 @@ import Control.Monad.Reader
 import Data.Attoparsec.Char8             (isDigit)
 import qualified Data.ByteString.Char8   as B
 import Data.Char                         (toLower, toUpper)
+import Data.Convertible                  (convert)
+import Data.Convertible.Instances()
 import Data.Map                          as M
 import Data.Set                          as Set (member)
 import Data.Time.Calendar
-import Data.Time.LocalTime               (TimeZone)
+import Data.Time.Clock.POSIX             (POSIXTime)
+import Data.Time.LocalTime               (TimeZone, ZonedTime)
 
 lookupMonth :: B.ByteString -> Maybe Integer
 lookupMonth = flip M.lookup months . B.map toLower
@@ -100,3 +103,6 @@ yearDayToDate year day = if (day <= lastDay && day > 1)
 
 isFlagSet :: Flag -> DateParser Bool
 isFlagSet f = asks $ Set.member f . flags
+
+posixToZoned :: POSIXTime -> ZonedTime
+posixToZoned = convert
