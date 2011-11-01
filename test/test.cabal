@@ -1,0 +1,23 @@
+Name:                test
+Version:             0.1
+Synopsis:            Tests for the timeparsers package.
+License:             BSD3
+License-file:        LICENSE
+Author:              Nathan Hunter
+Category:            Testing
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Executable test
+  Main-is:
+    Test.hs
+  hs-source-dirs: .., .
+  Build-depends:
+    QuickCheck,
+    bytestring,
+    containers,
+    attoparsec,
+    convertible,
+    mtl,
+    time,
+    base
