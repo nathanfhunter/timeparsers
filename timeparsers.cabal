@@ -1,7 +1,6 @@
 Name:                timeparsers
 Version:             0.1
 Synopsis:            Attoparsec parsers for various Date/Time formats.
--- Description:
 License:             BSD3
 License-file:        LICENSE
 Author:              Nathan Ferris Hunter
@@ -11,7 +10,6 @@ Category:            Data
 Build-type:          Simple
 -- Extra-source-files:
 Cabal-version:       >=1.2
-
 
 Library
   Exposed-modules:

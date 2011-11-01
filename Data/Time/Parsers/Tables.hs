@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections#-}
 
 module Data.Time.Parsers.Tables ( months
                                 , timezones
                                 , ausTimezones
                                 ) where
 
-import Control.Arrow         (second)
-import Data.ByteString.Char8 (ByteString)
+import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Map              hiding (map)
-import Data.Time             (TimeZone, minutesToTimeZone)
+import Data.Time             (TimeZone(..))
 
 months :: Map ByteString Integer
 months = fromList [ ("january", 1),   ("jan", 1)
@@ -25,8 +25,11 @@ months = fromList [ ("january", 1),   ("jan", 1)
                   , ("december", 12), ("dec", 12)
                   ]
 
+mkTimezone :: (ByteString, Int) -> (ByteString, TimeZone)
+mkTimezone (name, minutes) = (name,) . TimeZone minutes False $ unpack name
+
 timezones :: Map ByteString TimeZone
-timezones = fromList . map (second minutesToTimeZone) $
+timezones = fromList . map mkTimezone $
             [ ("NZDT",780), ("IDLE",720), ("NZST",720), ("NZT",720)
             , ("AESST",660), ("ACSST",630), ("CADT",630), ("SADT",630)
             , ("AEST",600), ("EAST",600), ("GST",600), ("LIGT",600)
@@ -56,5 +59,5 @@ timezones = fromList . map (second minutesToTimeZone) $
             ]
 
 ausTimezones :: Map ByteString TimeZone
-ausTimezones = fromList . map (second minutesToTimeZone) $
+ausTimezones = fromList . map mkTimezone $
                [("ACST",570), ("CST", 630), ("EST",600), ("SAT",570)]

@@ -9,6 +9,7 @@ import Control.Applicative                  ((<$>),(<*>),(<|>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8                as A
 import Data.Attoparsec.FastSet              (set, FastSet, memberChar)
+import Data.Char                            (toUpper)
 import Data.Fixed                           (Pico)
 import Data.Set                             (fromList)
 import Data.Time                            hiding (parseTime)
@@ -20,18 +21,19 @@ import qualified Data.ByteString.Char8      as B
 nDigit :: (Read a, Num a) => Int -> Parser a
 nDigit n = read <$> count n digit
 
+parseDateToken :: FastSet -> Parser DateToken
+parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
+
 parsePico :: Parser Pico
 parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
   where
-  postradix = do
-    _ <- char '.'
-    bs <- A.takeWhile isDigit
-    let i = fromInteger . read . B.unpack $ bs
-        l = B.length bs
-    return (i/10^l)
+    postradix = do
+        _ <- char '.'
+        bs <- A.takeWhile isDigit
+        let i = fromInteger . read . B.unpack $ bs
+            l = B.length bs
+        return (i/10^l)
 
-parseDateToken :: FastSet -> Parser DateToken
-parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
 
 onlyParse :: OptionedParser a -> OptionedParser a
 onlyParse p = p >>= (\r -> lift endOfInput >> return r)
@@ -117,20 +119,14 @@ julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
 --Time Parsers
 
 twelveHour :: OptionedParser TimeOfDay
-twelveHour = do leapSec <- isFlagSet AllowLeapSeconds
-                th <- lift twelveHour'
-                let seconds = timeOfDayToTime th
-                if (not leapSec && seconds >= 86400)
-                then mzero
-                else return th
-
+twelveHour = lift twelveHour'
 
 twelveHour' :: Parser TimeOfDay
 twelveHour' = do
     h' <- (nDigit 2 <|> nDigit 1)
     m  <- option 0 $ char ':' >> nDigit 2
     s  <- option 0 $ char ':' >> parsePico
-    ampm <- skipSpace >> (string "AM" <|> string "PM")
+    ampm <- B.map toUpper <$> (skipSpace >> (stringCI "AM" <|> stringCI "PM"))
     h <- case ampm of
       "AM" -> make24 False h'
       "PM" -> make24 True h'
@@ -144,12 +140,7 @@ twelveHour' = do
         GT -> mzero
 
 twentyFourHour :: OptionedParser TimeOfDay
-twentyFourHour = do leapSec <- isFlagSet AllowLeapSeconds
-                    tfh <- lift twentyFourHour'
-                    let seconds = timeOfDayToTime tfh
-                    if (not leapSec && seconds >= 86400)
-                    then mzero
-                    else return tfh
+twentyFourHour = lift twentyFourHour'
 
 twentyFourHour' :: Parser TimeOfDay
 twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
@@ -175,7 +166,7 @@ offsetTimezone' =  (char 'Z' >> return utc) <|>
   where
     plus  = char '+' >> return minutesToTimeZone
     minus = char '-' >> return (minutesToTimeZone . negate)
-    hour p = p >>= (\n -> if (n < 12) then (return $ 60*n) else mzero)
+    hour p = p >>= (\n -> if (n < 24) then (return $ 60*n) else mzero)
     minute  p = option () (char ':' >> return ()) >> p >>=
                 (\n -> if (n < 60) then return n else mzero)
     timezone'' = choice [ (+) <$> (hour $ nDigit 2) <*> (minute $ nDigit 2)
@@ -200,14 +191,9 @@ posixTime = isFlagSet RequirePosixUnit >>= lift . posixTime'
 
 posixTime' :: Bool -> Parser POSIXTime
 posixTime' requireS = do
-    bytestring <- (B.append) <$>
-                  (option "0" $ takeWhile1 isDigit) <*>
-                  (option "" $ (B.cons) <$> char '.' <*> A.takeWhile isDigit)
+    r <- rational
     when requireS $ char 's' >> return ()
-    return . realToFrac . readDouble . B.unpack $ bytestring
-  where
-    readDouble :: String -> Double
-    readDouble = read
+    return r
 
 zonedTime :: OptionedParser Day -> OptionedParser TimeOfDay ->
              OptionedParser TimeZone -> OptionedParser ZonedTime
@@ -260,13 +246,13 @@ defaultDate = charSeparated <|>
 defaultTime :: OptionedParser TimeOfDay
 defaultTime = twelveHour <|> twentyFourHour
 
-defaultTimeZone :: OptionedParser TimeZone
-defaultTimeZone = offsetTimezone <|> namedTimezone
+defaultTimezone :: OptionedParser TimeZone
+defaultTimezone = namedTimezone <|> offsetTimezone
 
 defaultTimeStamp :: FromZonedTime a => OptionedParser a
 defaultTimeStamp = onlyParse anyFromZoned' <|> onlyParse anyFromPosix
   where
-    anyFromZoned' = anyFromZoned defaultDate defaultTime defaultTimeZone
+    anyFromZoned' = anyFromZoned defaultDate defaultTime defaultTimezone
 
 debugParse :: Options -> OptionedParser a ->
               B.ByteString -> Result a

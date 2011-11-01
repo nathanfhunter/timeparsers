@@ -82,7 +82,7 @@ makeDate a b c f = case (a, b, c) of
     fromGregorian' y m d = fromGregorian y (fromIntegral m) (fromIntegral d)
 
 forceRecent :: Day -> Day
-forceRecent day | y < 100 && y <= 70 = addGregorianYearsClip 2000 day
+forceRecent day | y < 100 && y < 70  = addGregorianYearsClip 2000 day
                 | y < 100            = addGregorianYearsClip 1900 day
                 | otherwise          = day
   where
@@ -94,7 +94,7 @@ tryFormats fs d = (msum $ Prelude.map d fs)
 
 yearDayToDate :: forall (m:: * -> *). Monad m =>
                  Integer -> Integer -> m Day
-yearDayToDate year day = if (day <= lastDay && day > 1)
+yearDayToDate year day = if (day <= lastDay && day > 0)
                          then return . addDays (day - 1) $
                               fromGregorian year 0 0
                          else fail "Invalid Day of Year"

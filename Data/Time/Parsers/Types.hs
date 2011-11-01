@@ -13,9 +13,7 @@ import qualified Data.Set          as Set
 import Data.Time
 import Data.Time.Clock.POSIX
 
-data TimeStamp = Zoned ZonedTime |
-                 Local LocalTime |
-                 Posix POSIXTime deriving (Show)
+data TimeStamp = TimeStamp (Maybe Day) (Maybe TimeOfDay) (Maybe TimeZone)
 
 class FromZonedTime a where
     fromZonedTime :: ZonedTime -> a
@@ -38,7 +36,6 @@ instance FromZonedTime POSIXTime where
 data DateFormat = YMD | MDY | DMY deriving (Eq, Show)
 
 data Flag = MakeRecent          |
-            AllowLeapSeconds    |
             DefaultToMidnight   |
             DefaultToUTC        |
             RequirePosixUnit    |
