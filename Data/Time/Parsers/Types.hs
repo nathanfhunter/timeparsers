@@ -13,8 +13,6 @@ import qualified Data.Set          as Set
 import Data.Time
 import Data.Time.Clock.POSIX
 
-data TimeStamp = TimeStamp (Maybe Day) (Maybe TimeOfDay) (Maybe TimeZone)
-
 class FromZonedTime a where
     fromZonedTime :: ZonedTime -> a
 
@@ -51,3 +49,9 @@ type OptionedParser a = ReaderT Options Parser a
 data DateToken = Year Integer  |
                  Month Integer |
                  Any Integer deriving (Eq, Show)
+
+data ExtendedTimestamp a = Timestamp a |
+                           Now         |
+                           Yesterday   |
+                           Today       |
+                           Tomorrow    deriving (Eq, Show)

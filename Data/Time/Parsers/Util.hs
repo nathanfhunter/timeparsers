@@ -6,7 +6,7 @@ module Data.Time.Parsers.Util where
 import Data.Time.Parsers.Tables
 import Data.Time.Parsers.Types
 
-import Control.Applicative               ((<|>))
+import Control.Applicative               ((<|>),(<$>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8             (isDigit)
 import qualified Data.ByteString.Char8   as B
@@ -15,9 +15,8 @@ import Data.Convertible                  (convert)
 import Data.Convertible.Instances()
 import Data.Map                          as M
 import Data.Set                          as Set (member)
-import Data.Time.Calendar
+import Data.Time
 import Data.Time.Clock.POSIX             (POSIXTime)
-import Data.Time.LocalTime               (TimeZone, ZonedTime)
 
 lookupMonth :: B.ByteString -> Maybe Integer
 lookupMonth = flip M.lookup months . B.map toLower
@@ -112,3 +111,16 @@ makeBCE day = let (y,d,m) = toGregorian day
               in  if (y < 0)
                   then fail "Already BCE"
                   else return $ fromGregorian (negate y + 1) d m
+
+fromExtendedTimestamp :: FromZonedTime a => ExtendedTimestamp a -> IO a
+fromExtendedTimestamp ts = case ts of
+    Timestamp a -> return a
+    Now         -> fromZonedTime <$> getZonedTime
+    Yesterday   -> fromZonedTime . addDays' (-1) . atMidnight <$> getZonedTime
+    Today       -> fromZonedTime . atMidnight <$> getZonedTime
+    Tomorrow    -> fromZonedTime . addDays' 1 . atMidnight <$> getZonedTime
+  where
+    atMidnight (ZonedTime (LocalTime d _) tz) =
+        ZonedTime (LocalTime d midnight) tz
+    addDays' n (ZonedTime (LocalTime d tod) tz) =
+        ZonedTime (LocalTime (addDays n d) tod) tz

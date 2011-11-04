@@ -243,6 +243,16 @@ localTime date time = do
   where
     makeBCE' (LocalTime d t) = makeBCE d >>= \d' -> return $ LocalTime d' t
 
+extendedTimestamp :: OptionedParser a -> OptionedParser ( ExtendedTimestamp a )
+extendedTimestamp p = either Timestamp id <$> eitherP p extendedTimestamp'
+  where
+    extendedTimestamp' =
+      lift $ choice [ stringCI "now"       >> return Now
+                    , stringCI "yesterday" >> return Yesterday
+                    , stringCI "today"     >> return Today
+                    , stringCI "tomorrow"  >> return Tomorrow
+                    ]
+
 --Defaults and Debugging
 
 defaultOptions :: Options
