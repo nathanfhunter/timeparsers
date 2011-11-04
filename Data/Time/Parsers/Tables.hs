@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections#-}
 
-module Data.Time.Parsers.Tables ( months
+module Data.Time.Parsers.Tables ( weekdays
+                                , months
                                 , timezones
                                 , ausTimezones
                                 ) where
@@ -9,6 +10,16 @@ module Data.Time.Parsers.Tables ( months
 import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Map              hiding (map)
 import Data.Time             (TimeZone(..))
+
+weekdays :: [ByteString]
+weekdays = [ "Monday", "Mon"
+           , "Tuesday", "Tue", "Tues"
+           , "Wednesday", "Wed", "Weds"
+           , "Thursday", "Thu", "Thur", "Thurs"
+           , "Friday", "Fri"
+           , "Saturday", "Sat"
+           , "Sunday", "Sun"
+           ]
 
 months :: Map ByteString Integer
 months = fromList [ ("january", 1),   ("jan", 1)

@@ -4,6 +4,7 @@ module Data.Time.Parsers where
 
 import Data.Time.Parsers.Types
 import Data.Time.Parsers.Util
+import Data.Time.Parsers.Tables             (weekdays)
 
 import Control.Applicative                  ((<$>),(<*>),(<|>))
 import Control.Monad.Reader
@@ -34,6 +35,16 @@ parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
             l = B.length bs
         return (i/10^l)
 
+isBCE :: OptionedParser Bool
+isBCE = lift . option False $ const True <$> isBCE'
+  where
+    isBCE' = skipSpace >> (string "BCE" <|> string "BC")
+
+skipWeekday :: Parser ()
+skipWeekday = option () $
+              ( choice $ map stringCI weekdays ) >>
+              (option undefined $ char ',')      >>
+              skipSpace
 
 onlyParse :: OptionedParser a -> OptionedParser a
 onlyParse p = p >>= (\r -> lift endOfInput >> return r)
@@ -44,16 +55,20 @@ fourTwoTwo :: OptionedParser Day
 fourTwoTwo = lift fourTwoTwo'
 
 fourTwoTwo' :: Parser Day
-fourTwoTwo' = maybe (fail "Invalid Date Range") return =<<
-              (fromGregorianValid <$> nDigit 4 <*> nDigit 2 <*> nDigit 2)
+fourTwoTwo' = skipWeekday >>
+              (fromGregorianValid <$> nDigit 4 <*> nDigit 2 <*> nDigit 2) >>=
+              maybe (fail "Invalid Date Range") return
 
 twoTwoTwo :: OptionedParser Day
 twoTwoTwo = isFlagSet MakeRecent >>= lift . twoTwoTwo'
 
 twoTwoTwo' :: Bool -> Parser Day
-twoTwoTwo' mr = fmap (if mr then forceRecent else id) $
-                maybe (fail "Invalid Date Range") return =<<
-                (fromGregorianValid <$> nDigit 2 <*> nDigit 2 <*> nDigit 2)
+twoTwoTwo' mr =
+    skipWeekday >>
+    (fromGregorianValid <$> nDigit 2 <*> nDigit 2 <*> nDigit 2) >>=
+    maybe (fail "Invalid Date Range") return'
+  where
+    return' = if mr then return . forceRecent else return
 
 charSeparated :: OptionedParser Day
 charSeparated = do
@@ -82,12 +97,13 @@ fullDate = isFlagSet MakeRecent >>= lift . fullDate'
 
 fullDate' :: Bool -> Parser Day
 fullDate' makeRecent' = do
+    skipWeekday
     month <- maybe mzero (return . Month) <$>
              lookupMonth =<< (A.takeWhile isAlpha_ascii)
-    _ <- space
-    day <- Any . read . B.unpack <$> A.takeWhile isDigit
-    _ <- string ", "
-    year <- readDateToken =<< A.takeWhile isDigit
+    _     <- space
+    day   <- Any . read . B.unpack <$> A.takeWhile isDigit
+    _     <- string ", "
+    year  <- readDateToken =<< A.takeWhile isDigit
     let forceRecent' = if (noYear year && makeRecent')
                        then forceRecent
                        else id
@@ -113,7 +129,8 @@ julianDay :: OptionedParser Day
 julianDay = lift julianDay'
 
 julianDay' :: Parser Day
-julianDay' = (string "Julian" <|> string "JD" <|> string "J") >>
+julianDay' = skipWeekday >>
+             (string "Julian" <|> string "JD" <|> string "J") >>
              ModifiedJulianDay <$> signed decimal
 
 --Time Parsers
@@ -123,11 +140,11 @@ twelveHour = lift twelveHour'
 
 twelveHour' :: Parser TimeOfDay
 twelveHour' = do
-    h' <- (nDigit 2 <|> nDigit 1)
-    m  <- option 0 $ char ':' >> nDigit 2
-    s  <- option 0 $ char ':' >> parsePico
+    h'   <- (nDigit 2 <|> nDigit 1)
+    m    <- option 0 $ char ':' >> nDigit 2
+    s    <- option 0 $ char ':' >> parsePico
     ampm <- B.map toUpper <$> (skipSpace >> (stringCI "AM" <|> stringCI "PM"))
-    h <- case ampm of
+    h    <- case ampm of
       "AM" -> make24 False h'
       "PM" -> make24 True h'
       _    -> fail "Should be impossible."
@@ -195,15 +212,21 @@ posixTime' requireS = do
     when requireS $ char 's' >> return ()
     return r
 
-zonedTime :: OptionedParser Day -> OptionedParser TimeOfDay ->
-             OptionedParser TimeZone -> OptionedParser ZonedTime
-zonedTime date time timezone = do
+zonedTime :: OptionedParser LocalTime ->
+             OptionedParser TimeZone ->
+             OptionedParser ZonedTime
+zonedTime localT timezone = do
     defaultToUTC <- isFlagSet DefaultToUTC
     let timezone'  = (option undefined $ lift space) >> timezone
         mtimezone  = if defaultToUTC
                      then (option utc timezone')
                      else timezone'
-    ZonedTime <$> localTime date time <*> mtimezone
+    zonedT <- ZonedTime <$> localT <*> mtimezone
+    bce <- isBCE
+    if bce then makeBCE' zonedT else return zonedT
+  where
+    makeBCE' (ZonedTime (LocalTime d t) tz) =
+        makeBCE d >>= \d' -> return $ ZonedTime (LocalTime d' t) tz
 
 localTime :: OptionedParser Day ->
              OptionedParser TimeOfDay ->
@@ -214,46 +237,59 @@ localTime date time = do
         mtime = if defaultToMidnight
                 then (option midnight time')
                 else time'
-    LocalTime <$> date <*> mtime
-
-anyFromZoned :: FromZonedTime a =>
-                OptionedParser Day -> OptionedParser TimeOfDay ->
-                OptionedParser TimeZone -> OptionedParser a
-anyFromZoned d t tz = fromZonedTime <$> zonedTime d t tz
-
-anyFromPosix :: FromZonedTime a => OptionedParser a
-anyFromPosix = fromZonedTime . posixToZoned <$> posixTime
+    localT <- LocalTime <$> date <*> mtime
+    bce <- isBCE
+    if bce then makeBCE' localT else return localT
+  where
+    makeBCE' (LocalTime d t) = makeBCE d >>= \d' -> return $ LocalTime d' t
 
 --Defaults and Debugging
 
 defaultOptions :: Options
 defaultOptions = Options { formats = [YMD,DMY,MDY]
-                         , seps = (set ". /-")
+                         , seps = set ". /-"
                          , flags = fromList [ MakeRecent
                                             , DefaultToUTC
                                             , DefaultToMidnight
                                             ]
                          }
 
-defaultDate :: OptionedParser Day
-defaultDate = charSeparated <|>
-              fourTwoTwo    <|>
-              yearDayOfYear <|>
-              twoTwoTwo     <|>
-              fullDate      <|>
-              julianDay
+defaultDay :: OptionedParser Day
+defaultDay = do date <- defaultDayCE
+                bce  <- isBCE
+                if bce then makeBCE date else return date
 
-defaultTime :: OptionedParser TimeOfDay
-defaultTime = twelveHour <|> twentyFourHour
+defaultDayCE :: OptionedParser Day
+defaultDayCE = charSeparated <|>
+                fourTwoTwo    <|>
+                yearDayOfYear <|>
+                twoTwoTwo     <|>
+                fullDate      <|>
+                julianDay
 
-defaultTimezone :: OptionedParser TimeZone
-defaultTimezone = namedTimezone <|> offsetTimezone
+defaultTimeOfDay :: OptionedParser TimeOfDay
+defaultTimeOfDay = twelveHour <|> twentyFourHour
+
+defaultTimeZone :: OptionedParser TimeZone
+defaultTimeZone = namedTimezone <|> offsetTimezone
+
+defaultLocalTime :: OptionedParser LocalTime
+defaultLocalTime = localTime defaultDayCE defaultTimeOfDay
+
+defaultZonedTime :: OptionedParser ZonedTime
+defaultZonedTime = zonedTime defaultLocalTime defaultTimeZone
 
 defaultTimeStamp :: FromZonedTime a => OptionedParser a
-defaultTimeStamp = onlyParse anyFromZoned' <|> onlyParse anyFromPosix
+defaultTimeStamp = fromZonedTime <$> defaultTimeStamp'
   where
-    anyFromZoned' = anyFromZoned defaultDate defaultTime defaultTimezone
+    defaultTimeStamp' = onlyParse defaultZonedTime <|>
+                        (posixToZoned <$> posixTime)
 
-debugParse :: Options -> OptionedParser a ->
-              B.ByteString -> Result a
-debugParse opt p = flip feed B.empty . parse (runReaderT p opt)
+parseWithOptions :: Options -> OptionedParser a ->
+                    B.ByteString -> Result a
+parseWithOptions opt p = flip feed B.empty . (parse $ runReaderT p' opt)
+  where
+    p' = onlyParse p
+
+parseWithDefaultOptions :: OptionedParser a -> B.ByteString -> Result a
+parseWithDefaultOptions = parseWithOptions defaultOptions

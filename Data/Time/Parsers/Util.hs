@@ -106,3 +106,9 @@ isFlagSet f = asks $ Set.member f . flags
 
 posixToZoned :: POSIXTime -> ZonedTime
 posixToZoned = convert
+
+makeBCE :: Monad m => Day -> m Day
+makeBCE day = let (y,d,m) = toGregorian day
+              in  if (y < 0)
+                  then fail "Already BCE"
+                  else return $ fromGregorian (negate y + 1) d m

@@ -6,6 +6,7 @@ module Main (main) where
 import Data.Time.Parsers
 import Data.Time.Parsers.Types
 import Data.Time.Parsers.Tables         (timezones)
+import Data.Time.Parsers.Util           (posixToZoned)
 
 import Control.Applicative              ((<$>),(<*>))
 import Data.Attoparsec.Char8
@@ -30,8 +31,8 @@ formatAs = (B.pack .) . formatTime defaultTimeLocale
 parseFormats :: (FormatTime a, Eq a) =>
                 Options -> OptionedParser a -> [String] -> a -> Bool
 parseFormats options parser outputFormats value =
-    let bytestrings = map (flip formatAs value) outputFormats
-        parses = mapM (maybeResult . debugParse options parser) bytestrings
+    let bStrings = map (flip formatAs value) outputFormats
+        parses = mapM (maybeResult . parseWithOptions options parser) bStrings
     in  maybe False (and . map (value==)) parses
 
 
@@ -59,7 +60,7 @@ dateTests = do
     putStr "julian day test:        "
     quickCheck julianDayTest
     putStr "default date test:      "
-    quickCheck defaultDateTest
+    quickCheck defaultDayTest
 
 dayFromYearRange :: Integer -> Integer -> Gen Day
 dayFromYearRange miny maxy = fromGregorian      <$>
@@ -76,12 +77,12 @@ unambiguousDayUnder year = fromGregorian    <$>
 fourTwoTwoTest :: Property
 fourTwoTwoTest =
     forAll ( dayFromYearRange 0 9999 ) $
-    parseFormats defaultOptions fourTwoTwo ["%C%y%m%d"]
+    parseFormats defaultOptions fourTwoTwo ["%C%y%m%d", "%a, %C%y%m%d"]
 
 twoTwoTwoTest :: Property
 twoTwoTwoTest =
     forAll ( dayFromYearRange 1970 2069 ) $
-    parseFormats defaultOptions twoTwoTwo ["%y%m%d"]
+    parseFormats defaultOptions twoTwoTwo ["%y%m%d", "%A %y%m%d"]
 
 charSeparatedTest1 :: Property
 charSeparatedTest1 =
@@ -142,6 +143,7 @@ fullDateTest1 =
   where
     outputFormats = [ "%B %d, %C%y"
                     , "%b %d, %C%y"
+                    , "%A, %B %d, %C%y"
                     ]
 
 fullDateTest2 :: Property
@@ -169,14 +171,14 @@ julianDayTest :: Property
 julianDayTest =
     let duck = flip (B.append) . B.pack . show . toModifiedJulianDay
         beef day = maybe False (day ==) . maybeResult .
-                   debugParse defaultOptions julianDay . duck day
+                   parseWithDefaultOptions julianDay . duck day
         pants day = and $ map (beef day) ["J", "JD", "Julian"]
     in  forAll ( dayFromYearRange (-9999) 9999 ) pants
 
-defaultDateTest :: Property
-defaultDateTest =
+defaultDayTest :: Property
+defaultDayTest =
     forAll (unambiguousDayUnder 9999) $
-    parseFormats customOptions defaultDate outputFormats
+    parseFormats customOptions defaultDay outputFormats
   where
     customOptions = defaultOptions{formats = [DMY,MDY,YMD]}
     outputFormats = [ "%C%y-%m-%d"
@@ -324,7 +326,7 @@ timezoneTests = do
 
 namedTimezoneTest :: Property
 namedTimezoneTest =
-    forAll timezones' $ parseFormats defaultOptions defaultTimezone ["%Z"]
+    forAll timezones' $ parseFormats defaultOptions defaultTimeZone ["%Z"]
   where
     timezones' = elements $ elems timezones
 
@@ -359,7 +361,7 @@ localTimeTest1 :: Property
 localTimeTest1 =
     forAll timestamps $ parseFormats defaultOptions localTime' outputFormats
   where
-    localTime' = localTime defaultDate defaultTime
+    localTime' = localTime defaultDay defaultTimeOfDay
     timestamps = LocalTime <$>
                  dayFromYearRange 1970 2069 <*>
                  times
@@ -374,7 +376,7 @@ localTimeTest2 :: Property
 localTimeTest2 =
     forAll timestamps $ parseFormats defaultOptions localTime' outputFormats
   where
-    localTime' = localTime defaultDate defaultTime
+    localTime' = localTime defaultDay defaultTimeOfDay
     timestamps = LocalTime <$>
                  dayFromYearRange 1970 2069 <*>
                  return midnight
@@ -389,9 +391,9 @@ instance Eq ZonedTime where
 
 zonedTimeTest1 :: Property
 zonedTimeTest1 =
-    forAll timestamps $ parseFormats defaultOptions zonedTime' outputFormats
+    forAll timestamps $
+    parseFormats defaultOptions defaultZonedTime outputFormats
   where
-    zonedTime' = anyFromZoned defaultDate defaultTime defaultTimezone
     timestamps = ZonedTime <$> localTimes <*> timezones'
     localTimes = LocalTime <$> dayFromYearRange 1970 2069 <*> times
     times = TimeOfDay <$> choose (0,23) <*> choose (0,59) <*> return 0
@@ -404,9 +406,9 @@ zonedTimeTest1 =
 
 zonedTimeTest2 :: Property
 zonedTimeTest2 =
-    forAll timestamps $ parseFormats defaultOptions zonedTime' outputFormats
+    forAll timestamps $
+    parseFormats defaultOptions defaultZonedTime outputFormats
   where
-    zonedTime' = zonedTime defaultDate defaultTime defaultTimezone
     timestamps = ZonedTime <$> localTimes <*> timezones'
     localTimes = LocalTime <$> dayFromYearRange 1970 2069 <*> times
     times = TimeOfDay <$> choose (0,23) <*> choose (0,59) <*> return 0
@@ -419,9 +421,9 @@ zonedTimeTest2 =
 
 zonedTimeTest3 :: Property
 zonedTimeTest3 =
-    forAll timestamps $ parseFormats defaultOptions zonedTime' outputFormats
+    forAll timestamps $
+    parseFormats defaultOptions defaultZonedTime outputFormats
   where
-    zonedTime' = anyFromZoned defaultDate defaultTime defaultTimezone
     timestamps = ZonedTime <$> localTimes <*> return utc
     localTimes = LocalTime <$> dayFromYearRange 1970 2069 <*> times
     times = TimeOfDay <$> choose (0,23) <*> choose (0,59) <*> return 0
@@ -433,13 +435,15 @@ zonedTimeTest3 =
 
 posixTimeTest1 :: Property
 posixTimeTest1 =
-    forAll timestamps $ parseFormats defaultOptions anyFromPosix ["%s"]
+    forAll timestamps $ parseFormats defaultOptions fromPosixTime ["%s"]
   where
+    fromPosixTime = fromZonedTime . posixToZoned <$> posixTime
     timestamps = posixSecondsToUTCTime . realToFrac <$> (arbitrary::Gen Integer)
 
 posixTimeTest2 :: Property
 posixTimeTest2 =
-    forAll timestamps $ parseFormats defaultOptions anyFromPosix ["%s%Q"]
+    forAll timestamps $ parseFormats defaultOptions fromPosixTime ["%s%Q"]
   where
+    fromPosixTime = fromZonedTime . posixToZoned <$> posixTime
     timestamps = posixSecondsToUTCTime . realToFrac . abs <$>
                  (arbitrary::Gen Double)
