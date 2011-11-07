@@ -37,7 +37,7 @@ data Flag = MakeRecent          |
             DefaultToMidnight   |
             DefaultToUTC        |
             RequirePosixUnit    |
-            AustralianTimezones deriving (Eq,Ord,Show)
+            AustralianTimeZones deriving (Eq,Ord,Show)
 
 data Options = Options { formats :: [DateFormat]
                        , seps    :: FastSet

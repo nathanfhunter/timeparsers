@@ -3,8 +3,8 @@
 
 module Data.Time.Parsers.Tables ( weekdays
                                 , months
-                                , timezones
-                                , ausTimezones
+                                , timeZones
+                                , ausTimeZones
                                 ) where
 
 import Data.ByteString.Char8 (ByteString, unpack)
@@ -36,11 +36,11 @@ months = fromList [ ("january", 1),   ("jan", 1)
                   , ("december", 12), ("dec", 12)
                   ]
 
-mkTimezone :: (ByteString, Int) -> (ByteString, TimeZone)
-mkTimezone (name, minutes) = (name,) . TimeZone minutes False $ unpack name
+mkTimeZone :: (ByteString, Int) -> (ByteString, TimeZone)
+mkTimeZone (name, minutes) = (name,) . TimeZone minutes False $ unpack name
 
-timezones :: Map ByteString TimeZone
-timezones = fromList . map mkTimezone $
+timeZones :: Map ByteString TimeZone
+timeZones = fromList . map mkTimeZone $
             [ ("NZDT",780), ("IDLE",720), ("NZST",720), ("NZT",720)
             , ("AESST",660), ("ACSST",630), ("CADT",630), ("SADT",630)
             , ("AEST",600), ("EAST",600), ("GST",600), ("LIGT",600)
@@ -69,6 +69,6 @@ timezones = fromList . map mkTimezone $
             , ("CAT",-600), ("NT",-660), ("IDLW",-720)
             ]
 
-ausTimezones :: Map ByteString TimeZone
-ausTimezones = fromList . map mkTimezone $
+ausTimeZones :: Map ByteString TimeZone
+ausTimeZones = fromList . map mkTimeZone $
                [("ACST",570), ("CST", 630), ("EST",600), ("SAT",570)]

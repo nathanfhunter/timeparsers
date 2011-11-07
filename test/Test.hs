@@ -5,7 +5,7 @@ module Main (main) where
 
 import Data.Time.Parsers
 import Data.Time.Parsers.Types
-import Data.Time.Parsers.Tables         (timezones)
+import Data.Time.Parsers.Tables         (timeZones)
 import Data.Time.Parsers.Util           (posixToZoned)
 
 import Control.Applicative              ((<$>),(<*>))
@@ -22,7 +22,7 @@ import Test.QuickCheck
 main :: IO ()
 main = do dateTests
           timeTests
-          timezoneTests
+          timeZoneTests
           timestampTests
 
 formatAs :: FormatTime a => String -> a -> B.ByteString
@@ -39,18 +39,18 @@ parseFormats options parser outputFormats value =
 dateTests :: IO ()
 dateTests = do
     putStrLn "Date Tests -----------"
-    putStr "fourTwoTwo test:        "
-    quickCheck fourTwoTwoTest
-    putStr "twoTwoTwo test:         "
-    quickCheck twoTwoTwoTest
-    putStr "charSeparated test 1:   "
-    quickCheck charSeparatedTest1
-    putStr "charSeparated test 2:   "
-    quickCheck charSeparatedTest2
-    putStr "charSeparated test 3:   "
-    quickCheck charSeparatedTest3
-    putStr "charSeparated test 4:   "
-    quickCheck charSeparatedTest4
+    putStr "yyyymmdd test:        "
+    quickCheck yyyymmddTest
+    putStr "yymmdd test:         "
+    quickCheck yymmddTest
+    putStr "tokenizedDate test 1:   "
+    quickCheck tokenizedDateTest1
+    putStr "tokenizedDate test 2:   "
+    quickCheck tokenizedDateTest2
+    putStr "tokenizedDate test 3:   "
+    quickCheck tokenizedDateTest3
+    putStr "tokenizedDate test 4:   "
+    quickCheck tokenizedDateTest4
     putStr "fullDate Test1:         "
     quickCheck fullDateTest1
     putStr "fullDate Test2:         "
@@ -74,20 +74,20 @@ unambiguousDayUnder year = fromGregorian    <$>
                            choose (1,12)    <*>
                            choose (13,31)
 
-fourTwoTwoTest :: Property
-fourTwoTwoTest =
+yyyymmddTest :: Property
+yyyymmddTest =
     forAll ( dayFromYearRange 0 9999 ) $
-    parseFormats defaultOptions fourTwoTwo ["%C%y%m%d", "%a, %C%y%m%d"]
+    parseFormats defaultOptions yyyymmdd ["%C%y%m%d", "%a, %C%y%m%d"]
 
-twoTwoTwoTest :: Property
-twoTwoTwoTest =
+yymmddTest :: Property
+yymmddTest =
     forAll ( dayFromYearRange 1970 2069 ) $
-    parseFormats defaultOptions twoTwoTwo ["%y%m%d", "%A %y%m%d"]
+    parseFormats defaultOptions yymmdd ["%y%m%d", "%A %y%m%d"]
 
-charSeparatedTest1 :: Property
-charSeparatedTest1 =
+tokenizedDateTest1 :: Property
+tokenizedDateTest1 =
     forAll ( dayFromYearRange 0 20000 ) $
-    parseFormats customOptions charSeparated outputFormats
+    parseFormats customOptions tokenizedDate outputFormats
   where
     customOptions = defaultOptions {formats = [DMY]}
     outputFormats = [ "%d/%m/%C%y"
@@ -98,10 +98,10 @@ charSeparatedTest1 =
                     , "%d-%b-%C%y"
                     ]
 
-charSeparatedTest2 :: Property
-charSeparatedTest2 =
+tokenizedDateTest2 :: Property
+tokenizedDateTest2 =
     forAll ( dayFromYearRange 1970 2069 ) $
-    parseFormats customOptions charSeparated outputFormats
+    parseFormats customOptions tokenizedDate outputFormats
   where
     customOptions = defaultOptions {formats = [MDY]}
     outputFormats = [ "%m/%d/%y"
@@ -112,10 +112,10 @@ charSeparatedTest2 =
                     , "%b %d %y"
                     ]
 
-charSeparatedTest3 :: Property
-charSeparatedTest3 =
+tokenizedDateTest3 :: Property
+tokenizedDateTest3 =
     forAll ( dayFromYearRange 1 999 ) $
-    parseFormats customOptions charSeparated outputFormats
+    parseFormats customOptions tokenizedDate outputFormats
   where
     customOptions = defaultOptions{ flags = Set.empty
                                   , formats = [YMD]
@@ -128,10 +128,10 @@ charSeparatedTest3 =
                     , "%Y %b %d"
                     ]
 
-charSeparatedTest4 :: Property
-charSeparatedTest4 =
+tokenizedDateTest4 :: Property
+tokenizedDateTest4 =
     forAll ( unambiguousDayUnder 1500 ) $
-    parseFormats customOptions charSeparated outputFormats
+    parseFormats customOptions tokenizedDate outputFormats
   where
     customOptions = defaultOptions{formats = [DMY,MDY,YMD]}
     outputFormats = ["%C%y-%m-%d"]
@@ -316,25 +316,25 @@ twelveHourTest4 =
                     , "%I%p"
                     ]
 
-timezoneTests :: IO ()
-timezoneTests = do
-    putStrLn "Timezone Tests -------"
-    putStr   "Offset timezone test: "
-    quickCheck offsetTimezoneTest
-    putStr   "Named timezone test:  "
-    quickCheck namedTimezoneTest
+timeZoneTests :: IO ()
+timeZoneTests = do
+    putStrLn "TimeZone Tests -------"
+    putStr   "Offset timeZone test: "
+    quickCheck offsetTimeZoneTest
+    putStr   "Named timeZone test:  "
+    quickCheck namedTimeZoneTest
 
-namedTimezoneTest :: Property
-namedTimezoneTest =
-    forAll timezones' $ parseFormats defaultOptions defaultTimeZone ["%Z"]
+namedTimeZoneTest :: Property
+namedTimeZoneTest =
+    forAll timeZones' $ parseFormats defaultOptions defaultTimeZone ["%Z"]
   where
-    timezones' = elements $ elems timezones
+    timeZones' = elements $ elems timeZones
 
-offsetTimezoneTest :: Property
-offsetTimezoneTest =
-    forAll timezones' $ parseFormats defaultOptions offsetTimezone ["%z"]
+offsetTimeZoneTest :: Property
+offsetTimeZoneTest =
+    forAll timeZones' $ parseFormats defaultOptions offsetTimeZone ["%z"]
   where
-    timezones' = TimeZone              <$>
+    timeZones' = TimeZone              <$>
                  choose (- 1439, 1439) <*>
                  return False          <*>
                  return ""
@@ -394,10 +394,10 @@ zonedTimeTest1 =
     forAll timestamps $
     parseFormats defaultOptions defaultZonedTime outputFormats
   where
-    timestamps = ZonedTime <$> localTimes <*> timezones'
+    timestamps = ZonedTime <$> localTimes <*> timeZones'
     localTimes = LocalTime <$> dayFromYearRange 1970 2069 <*> times
     times = TimeOfDay <$> choose (0,23) <*> choose (0,59) <*> return 0
-    timezones' = elements $ elems timezones
+    timeZones' = elements $ elems timeZones
     outputFormats = [ "%Y-%m-%d %H:%M %Z"
                     , "%C%y%m%dT%H%M%Z"
                     , "%y%m%d %I:%M %P %Z"
@@ -409,10 +409,10 @@ zonedTimeTest2 =
     forAll timestamps $
     parseFormats defaultOptions defaultZonedTime outputFormats
   where
-    timestamps = ZonedTime <$> localTimes <*> timezones'
+    timestamps = ZonedTime <$> localTimes <*> timeZones'
     localTimes = LocalTime <$> dayFromYearRange 1970 2069 <*> times
     times = TimeOfDay <$> choose (0,23) <*> choose (0,59) <*> return 0
-    timezones' = minutesToTimeZone <$> choose (-1439, 1439)
+    timeZones' = minutesToTimeZone <$> choose (-1439, 1439)
     outputFormats = [ "%Y-%m-%d %H:%M %z"
                     , "%C%y%m%dT%H%M%z"
                     , "%y%m%d %I:%M %P %z"
