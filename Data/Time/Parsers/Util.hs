@@ -10,24 +10,21 @@ module Data.Time.Parsers.Util ( nDigit
                               , parseWithOptions
                               , parseWithDefaultOptions
                               , isFlagSet
-                              , posixToZoned
                               , makeBCE
                               , fromExtendedTimestamp
+                              , fromExtendedTimestampIO
                               , module Data.Time.Parsers.Types
                               ) where
 
 import Data.Time.Parsers.Types
 
-import Control.Applicative               ((<|>),(<$>),(<*>))
+import Control.Applicative               ((<|>),(<$>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8
 import Data.Attoparsec.FastSet              (set)
 import qualified Data.ByteString.Char8   as B
-import Data.Convertible                  (convert)
-import Data.Convertible.Instances()
 import Data.Set                          as Set (member, fromList)
 import Data.Time
-import Data.Time.Clock.POSIX             (POSIXTime)
 
 nDigit :: (Read a, Num a) => Int -> Parser a
 nDigit n = read <$> count n digit
@@ -61,24 +58,27 @@ parseWithDefaultOptions = parseWithOptions defaultOptions
 isFlagSet :: Flag -> OptionedParser Bool
 isFlagSet f = asks $ Set.member f . flags
 
-posixToZoned :: POSIXTime -> ZonedTime
-posixToZoned = convert
-
 makeBCE :: Monad m => Day -> m Day
 makeBCE day = let (y,d,m) = toGregorian day
               in  if (y < 0)
                   then fail "Already BCE"
                   else return $ fromGregorian (negate y + 1) d m
 
-fromExtendedTimestamp :: FromZonedTime a => ExtendedTimestamp a -> IO a
-fromExtendedTimestamp ts = case ts of
-    Timestamp a -> return a
-    Now         -> fromZonedTime <$> getZonedTime
-    Yesterday   -> fromZonedTime . addDays' (-1) . atMidnight <$> getZonedTime
-    Today       -> fromZonedTime . atMidnight <$> getZonedTime
-    Tomorrow    -> fromZonedTime . addDays' 1 . atMidnight <$> getZonedTime
+fromExtendedTimestamp :: (FromZonedTime a, ToZonedTime a) =>
+                         a -> ExtendedTimestamp a -> a
+fromExtendedTimestamp now ts = case ts of
+    Timestamp a -> a
+    Now         -> now
+    Yesterday   -> fromZonedTime . addDays' (-1) . atMidnight $ toZonedTime now
+    Today       -> fromZonedTime . atMidnight $ toZonedTime now
+    Tomorrow    -> fromZonedTime . addDays' 1 . atMidnight $ toZonedTime now
   where
     atMidnight (ZonedTime (LocalTime d _) tz) =
         ZonedTime (LocalTime d midnight) tz
     addDays' n (ZonedTime (LocalTime d tod) tz) =
         ZonedTime (LocalTime (addDays n d) tod) tz
+
+fromExtendedTimestampIO :: (FromZonedTime a, ToZonedTime a) =>
+                           ExtendedTimestamp a -> IO a
+fromExtendedTimestampIO ts = (fromZonedTime <$> getZonedTime) >>=
+                             return . flip fromExtendedTimestamp ts

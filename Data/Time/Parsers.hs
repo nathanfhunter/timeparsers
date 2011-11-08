@@ -1,4 +1,5 @@
 module Data.Time.Parsers ( fromExtendedTimestamp
+                         , fromExtendedTimestampIO
                          , parseWithOptions
                          , parseWithDefaultOptions
                          , defaultOptions

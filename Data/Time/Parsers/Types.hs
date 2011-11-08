@@ -31,6 +31,25 @@ instance FromZonedTime UTCTime where
 instance FromZonedTime POSIXTime where
     fromZonedTime = convert
 
+class ToZonedTime a where
+    toZonedTime :: a -> ZonedTime
+
+instance ToZonedTime ZonedTime where
+    toZonedTime = id
+
+instance ToZonedTime LocalTime where
+    toZonedTime = flip ZonedTime utc
+
+instance ToZonedTime Day where
+    toZonedTime = toZonedTime . flip LocalTime midnight
+
+instance ToZonedTime UTCTime where
+    toZonedTime = utcToZonedTime utc
+
+instance ToZonedTime POSIXTime where
+    toZonedTime = convert
+
+
 data DateFormat = YMD | MDY | DMY deriving (Eq, Show)
 
 data Flag = MakeRecent          |

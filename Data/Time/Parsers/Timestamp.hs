@@ -131,4 +131,4 @@ defaultTimestamp :: FromZonedTime a => OptionedParser a
 defaultTimestamp = fromZonedTime <$> defaultTimestamp'
   where
     defaultTimestamp' = onlyParse defaultZonedTime <|>
-                        (posixToZoned <$> posixTime)
+                        (toZonedTime <$> posixTime)
