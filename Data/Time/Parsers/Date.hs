@@ -193,7 +193,9 @@ julianDay = lift julianDay'
 julianDay' :: Parser Day
 julianDay' = skipWeekday >>
              (string "Julian" <|> string "JD" <|> string "J") >>
-             ModifiedJulianDay <$> signed decimal
+             julianDay'' <$> signed decimal
+  where
+    julianDay'' n = ModifiedJulianDay $ n - 2399963
 
 defaultDay :: OptionedParser Day
 defaultDay = do date <- defaultDayCE
