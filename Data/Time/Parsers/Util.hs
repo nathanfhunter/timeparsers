@@ -26,19 +26,26 @@ import qualified Data.ByteString.Char8   as B
 import Data.Set                          as Set (member, fromList)
 import Data.Time
 
+-- | Parse a given number of digits
 nDigit :: (Read a, Num a) => Int -> Parser a
 nDigit n = read <$> count n digit
 
+-- | Return true if the strings "BC" or "BCE" are consumed, false otherwise
 isBCE :: OptionedParser Bool
 isBCE = lift . option False $ const True <$> isBCE'
   where
     isBCE' = skipSpace >> (string "BCE" <|> string "BC")
 
+-- | Fail if the given parser fails to consume all of the input
 onlyParse :: OptionedParser a -> OptionedParser a
 onlyParse p = p >>= (\r -> lift endOfInput >> return r)
 
+-- | Default Options to use:
+-- Try YMD, then MDY, then DMY
+-- Accept '.', ' ', '/', '-' as separators.
+-- Use flags MakeRecent, DefaultToUTC, DefaultToMidnight
 defaultOptions :: Options
-defaultOptions = Options { formats = [YMD,DMY,MDY]
+defaultOptions = Options { formats = [YMD,MDY,DMY]
                          , seps = set ". /-"
                          , flags = Set.fromList [ MakeRecent
                                                 , DefaultToUTC
@@ -46,24 +53,34 @@ defaultOptions = Options { formats = [YMD,DMY,MDY]
                                                 ]
                          }
 
+-- | Use given options and parser to parse a ByteString.
+-- always feeds empty, so a Partial result is never returned.
 parseWithOptions :: Options -> OptionedParser a ->
                     B.ByteString -> Result a
 parseWithOptions opt p = flip feed B.empty . (parse $ runReaderT p' opt)
   where
     p' = onlyParse p
 
+-- | Use default options to parse a ByteString with a given parser
 parseWithDefaultOptions :: OptionedParser a -> B.ByteString -> Result a
 parseWithDefaultOptions = parseWithOptions defaultOptions
 
+-- | Return whether a given flag is set.
 isFlagSet :: Flag -> OptionedParser Bool
 isFlagSet f = asks $ Set.member f . flags
 
+-- | Converts a CE date into a BCE date. Fails if the date is already BCE
+-- Warning: If you anticipate BCE dates, it is advisable to not use the
+-- MakeRecent flag. It will cause ByteStrings such as "79 BC" to be parsed as
+-- "1979 BCE"
 makeBCE :: Monad m => Day -> m Day
 makeBCE day = let (y,d,m) = toGregorian day
               in  if (y < 0)
                   then fail "Already BCE"
                   else return $ fromGregorian (negate y + 1) d m
 
+-- | Given a timestamp to use as the current time, purely convert an
+-- ExtendedTimestamp to a timestamp
 fromExtendedTimestamp :: (FromZonedTime a, ToZonedTime a) =>
                          a -> ExtendedTimestamp a -> a
 fromExtendedTimestamp now ts = case ts of
@@ -78,6 +95,8 @@ fromExtendedTimestamp now ts = case ts of
     addDays' n (ZonedTime (LocalTime d tod) tz) =
         ZonedTime (LocalTime (addDays n d) tod) tz
 
+-- | Use getZonedTime to get the current time, and use it to convert an
+-- ExtendedTimestamp to a timestamp
 fromExtendedTimestampIO :: (FromZonedTime a, ToZonedTime a) =>
                            ExtendedTimestamp a -> IO a
 fromExtendedTimestampIO ts = (fromZonedTime <$> getZonedTime) >>=

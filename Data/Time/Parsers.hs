@@ -18,5 +18,3 @@ import Data.Time.Parsers.Timestamp
 import Data.Time.Parsers.Types
 
 import Data.Time.Parsers.Util
-
-

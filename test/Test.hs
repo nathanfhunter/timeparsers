@@ -6,7 +6,6 @@ module Main (main) where
 import Data.Time.Parsers
 import Data.Time.Parsers.Types
 import Data.Time.Parsers.Tables         (timeZones)
-import Data.Time.Parsers.Util           (posixToZoned)
 
 import Control.Applicative              ((<$>),(<*>))
 import Data.Attoparsec.Char8
@@ -42,7 +41,7 @@ dateTests = do
     putStr "yyyymmdd test:        "
     quickCheck yyyymmddTest
     putStr "yymmdd test:         "
-    quickCheck yymmddTest
+    quickCheck yyyymmddTest
     putStr "tokenizedDate test 1:   "
     quickCheck tokenizedDateTest1
     putStr "tokenizedDate test 2:   "
@@ -169,7 +168,7 @@ yearDayOfYearTest =
 
 julianDayTest :: Property
 julianDayTest =
-    let duck = flip (B.append) . B.pack . show . toModifiedJulianDay
+    let duck = flip (B.append) . B.pack . show . (+2399963) . toModifiedJulianDay
         beef day = maybe False (day ==) . maybeResult .
                    parseWithDefaultOptions julianDay . duck day
         pants day = and $ map (beef day) ["J", "JD", "Julian"]
@@ -437,13 +436,13 @@ posixTimeTest1 :: Property
 posixTimeTest1 =
     forAll timestamps $ parseFormats defaultOptions fromPosixTime ["%s"]
   where
-    fromPosixTime = fromZonedTime . posixToZoned <$> posixTime
+    fromPosixTime = fromZonedTime . toZonedTime <$> posixTime
     timestamps = posixSecondsToUTCTime . realToFrac <$> (arbitrary::Gen Integer)
 
 posixTimeTest2 :: Property
 posixTimeTest2 =
     forAll timestamps $ parseFormats defaultOptions fromPosixTime ["%s%Q"]
   where
-    fromPosixTime = fromZonedTime . posixToZoned <$> posixTime
+    fromPosixTime = fromZonedTime . toZonedTime <$> posixTime
     timestamps = posixSecondsToUTCTime . realToFrac . abs <$>
                  (arbitrary::Gen Double)

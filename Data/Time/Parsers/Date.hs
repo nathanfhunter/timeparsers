@@ -30,17 +30,6 @@ import Prelude                         hiding (takeWhile)
 lookupMonth :: B.ByteString -> Maybe Integer
 lookupMonth = flip M.lookup months . B.map toLower
 
-readDateToken :: forall (m :: * -> *). Monad m => B.ByteString -> m DateToken
-readDateToken bs |notDigits bs     = maybe (fail $ "Invalid DateToken" ++
-                                                   (B.unpack bs))
-                                           (return . Month)
-                                           (lookupMonth bs)
-                 |B.length bs >= 3 = returnRead Year bs
-                 |otherwise        = returnRead Any $ bs
-  where
-    returnRead f = return . f . read . B.unpack
-    notDigits = not . B.all isDigit
-
 makeDate :: forall (m :: * -> *). Monad m =>
             DateToken -> DateToken -> DateToken -> DateFormat -> m Day
 makeDate a b c f = case (a, b, c) of
@@ -104,15 +93,14 @@ yearDayToDate year day = if (day <= lastDay && day > 0)
 
 --Date Parsers
 
-parseDateToken :: FastSet -> Parser DateToken
-parseDateToken seps' = readDateToken =<< (takeTill $ flip memberChar seps')
-
 skipWeekday :: Parser ()
 skipWeekday = option () $
               ( choice $ map stringCI weekdays ) >>
               (option undefined $ char ',')      >>
               skipSpace
 
+-- | parse a date with no separators of the format yyyymmdd.
+-- Will treat a preceding weekday as noise.
 yyyymmdd :: OptionedParser Day
 yyyymmdd = lift yyyymmdd'
 
@@ -121,6 +109,8 @@ yyyymmdd' = skipWeekday >>
               (fromGregorianValid <$> nDigit 4 <*> nDigit 2 <*> nDigit 2) >>=
               maybe (fail "Invalid Date Range") return
 
+-- | parse a date with no separators of the format yymmdd.
+-- Will treat a preceding weekday as noise
 yymmdd :: OptionedParser Day
 yymmdd = isFlagSet MakeRecent >>= lift . yymmdd'
 
@@ -132,6 +122,24 @@ yymmdd' mr =
   where
     return' = if mr then return . forceRecent else return
 
+-- | parse a date formatted as three values separated by some separator
+-- values can be month names, abbreviations, or numeric values. Numeric values
+-- with more than two digits are assumed to represent years.
+
+numericDateToken :: Parser DateToken
+numericDateToken = tokenize <$> takeWhile1 isDigit
+  where
+    tokenize bs = if   B.length bs > 2
+                  then Year . read $ B.unpack bs
+                  else Any  . read $ B.unpack bs
+
+namedMonthToken :: Parser DateToken
+namedMonthToken = (lookupMonth <$> takeWhile isAlpha_ascii) >>=
+                  maybe (fail "Invalid Month") (return . Month)
+
+dateToken :: Parser DateToken
+dateToken = numericDateToken <|> namedMonthToken
+
 tokenizedDate :: OptionedParser Day
 tokenizedDate = do
     s <- asks seps
@@ -141,11 +149,11 @@ tokenizedDate = do
 
 tokenizedDate' :: FastSet -> [DateFormat] -> Bool -> Parser Day
 tokenizedDate' seps' formats' makeRecent' = do
-    a   <- parseDateToken seps'
+    a   <- dateToken
     sep <- satisfy $ flip memberChar seps'
-    b   <- parseDateToken seps'
+    b   <- dateToken
     _   <- satisfy (==sep)
-    c   <- readDateToken =<< takeWhile isDigit
+    c   <- numericDateToken
     let noYear (Year _) = False
         noYear _        = True
         noExplicitYear  = and . map noYear $ [a,b,c]
@@ -154,6 +162,9 @@ tokenizedDate' seps' formats' makeRecent' = do
     then return $ forceRecent date
     else return date
 
+
+-- | parse a date such as "January 1, 2011".
+-- Will treat a preceding weekday as noise
 fullDate :: OptionedParser Day
 fullDate = isFlagSet MakeRecent >>= lift . fullDate'
 
@@ -163,9 +174,9 @@ fullDate' makeRecent' = do
     month <- maybe mzero (return . Month) <$>
              lookupMonth =<< (takeWhile isAlpha_ascii)
     _     <- space
-    day   <- Any . read . B.unpack <$> takeWhile isDigit
+    day   <- numericDateToken
     _     <- string ", "
-    year  <- readDateToken =<< takeWhile isDigit
+    year  <- numericDateToken
     let forceRecent' = if (noYear year && makeRecent')
                        then forceRecent
                        else id
@@ -173,7 +184,8 @@ fullDate' makeRecent' = do
   where
     noYear (Year _) = False
     noYear _        = True
-
+-- | parse a date in year, day of year format
+-- i.e yyyy/ddd or yyyydd
 yearDayOfYear :: OptionedParser Day
 yearDayOfYear = do
     s <- asks seps
@@ -187,6 +199,8 @@ yearDayOfYear' seps' = do
   where
     maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
 
+-- | parse a julian day (days since 4713/1/1 BCE)
+-- Must prepend with "J", "JD", or "Julian"
 julianDay :: OptionedParser Day
 julianDay = lift julianDay'
 
@@ -197,11 +211,14 @@ julianDay' = skipWeekday >>
   where
     julianDay'' n = ModifiedJulianDay $ n - 2399963
 
+-- | parse a date using tokenizedDate, yyyymmdd, yymmdd, yearDayOfYear, fullDate
+-- or julianDay, converting to BCE if necessary
 defaultDay :: OptionedParser Day
 defaultDay = do date <- defaultDayCE
                 bce  <- isBCE
                 if bce then makeBCE date else return date
 
+-- | Parse a date as in defaultDay, but don't check for BCE
 defaultDayCE :: OptionedParser Day
 defaultDayCE = tokenizedDate <|>
                yyyymmdd      <|>

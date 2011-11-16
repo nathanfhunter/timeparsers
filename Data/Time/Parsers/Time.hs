@@ -27,6 +27,7 @@ parsePico = (+) <$> (fromInteger <$> decimal) <*> (option 0 postradix)
             l = B.length bs
         return (i/10^l)
 
+-- | Parse a TimeOfDay in twelve hour format
 twelveHour :: OptionedParser TimeOfDay
 twelveHour = lift twelveHour'
 
@@ -48,6 +49,7 @@ twelveHour' = do
         EQ -> return $ if pm then 12 else 0
         GT -> mzero
 
+-- | Parse a TimeOfDay in twenty four hour format
 twentyFourHour :: OptionedParser TimeOfDay
 twentyFourHour = lift twentyFourHour'
 
@@ -64,5 +66,6 @@ twentyFourHour' = maybe (fail "Invalid Time Range") return =<<
               option 0 (nDigit 2) <*>
               option 0 parsePico
 
+-- | Parse a time of day intwelve hour or twenty four hour format
 defaultTimeOfDay :: OptionedParser TimeOfDay
 defaultTimeOfDay = twelveHour <|> twentyFourHour
