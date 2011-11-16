@@ -7,6 +7,8 @@ module Data.Time.Parsers.Util ( nDigit
                               , isBCE
                               , onlyParse
                               , defaultOptions
+                              , withOptions
+                              , withDefaultOptions
                               , parseWithOptions
                               , parseWithDefaultOptions
                               , isFlagSet
@@ -18,7 +20,7 @@ module Data.Time.Parsers.Util ( nDigit
 
 import Data.Time.Parsers.Types
 
-import Control.Applicative               ((<|>),(<$>))
+import Control.Applicative               ((<|>),(<$>),(<*),(*>))
 import Control.Monad.Reader
 import Data.Attoparsec.Char8
 import Data.Attoparsec.FastSet              (set)
@@ -34,11 +36,11 @@ nDigit n = read <$> count n digit
 isBCE :: OptionedParser Bool
 isBCE = lift . option False $ const True <$> isBCE'
   where
-    isBCE' = skipSpace >> (string "BCE" <|> string "BC")
+    isBCE' = skipSpace *> (string "BCE" <|> string "BC")
 
 -- | Fail if the given parser fails to consume all of the input
 onlyParse :: OptionedParser a -> OptionedParser a
-onlyParse p = p >>= (\r -> lift endOfInput >> return r)
+onlyParse p = p <* lift endOfInput
 
 -- | Default Options to use:
 -- Try YMD, then MDY, then DMY
@@ -53,15 +55,23 @@ defaultOptions = Options { formats = [YMD,MDY,DMY]
                                                 ]
                          }
 
--- | Use given options and parser to parse a ByteString.
+withOptions :: OptionedParser a -> Options -> Parser a
+withOptions = runReaderT
+
+withDefaultOptions :: OptionedParser a -> Parser a
+withDefaultOptions = flip runReaderT defaultOptions
+
+-- | Use given options and parser to parse a single Timestamp.
 -- always feeds empty, so a Partial result is never returned.
+-- Ignores preceding and trailing whitespace.
 parseWithOptions :: Options -> OptionedParser a ->
                     B.ByteString -> Result a
 parseWithOptions opt p = flip feed B.empty . (parse $ runReaderT p' opt)
   where
-    p' = onlyParse p
+    p' = onlyParse (lift skipSpace *> p <* lift skipSpace)
 
--- | Use default options to parse a ByteString with a given parser
+-- | Use default options to parse single Timestamp with a given parser,
+-- ignoring preceding and trailing whitespace
 parseWithDefaultOptions :: OptionedParser a -> B.ByteString -> Result a
 parseWithDefaultOptions = parseWithOptions defaultOptions
 

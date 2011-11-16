@@ -1,11 +1,18 @@
-module Data.Time.Parsers ( fromExtendedTimestamp
+module Data.Time.Parsers ( -- * Utility functions
+                           fromExtendedTimestamp
                          , fromExtendedTimestampIO
+                         , withOptions
+                         , withDefaultOptions
                          , parseWithOptions
                          , parseWithDefaultOptions
                          , defaultOptions
+                           -- * Date Parsers
                          , module Data.Time.Parsers.Date
+                           -- * Time Parsers
                          , module Data.Time.Parsers.Time
+                           -- * Timestamp Parsers
                          , module Data.Time.Parsers.Timestamp
+                           -- * Data Types
                          , module Data.Time.Parsers.Types
                          ) where
 

@@ -1,14 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Time.Parsers.Timestamp ( offsetTimeZone
+module Data.Time.Parsers.Timestamp ( -- * TimeZone Parsers
+                                     offsetTimeZone
                                    , namedTimeZone
                                    , defaultTimeZone
+                                     -- * Timestamp Parsers
                                    , posixTime
                                    , zonedTime
                                    , localTime
                                    , defaultZonedTime
                                    , defaultLocalTime
                                    , defaultTimestamp
+                                     -- * Extended Timestamps
                                    , extendTimestamp
                                    ) where
 
@@ -35,8 +38,7 @@ lookupAusTimeZone :: B.ByteString -> Maybe TimeZone
 lookupAusTimeZone bs = M.lookup (B.map toUpper bs) ausTimeZones  <|>
                        lookupTimeZone bs
 
---TimeZone Parsers
-
+-- | Parse a timezone in offset format
 offsetTimeZone :: OptionedParser TimeZone
 offsetTimeZone = lift offsetTimeZone'
 
@@ -55,6 +57,7 @@ offsetTimeZone' =  (char 'Z' >> return utc) <|>
                         , hour $ nDigit 1
                         ]
 
+-- | Parse an lookup a named timezone
 namedTimeZone :: OptionedParser TimeZone
 namedTimeZone = isFlagSet AustralianTimeZones >>= lift . namedTimeZone'
 
@@ -64,8 +67,7 @@ namedTimeZone' aussie = (lookup' <$> takeWhile isAlpha_ascii) >>=
   where
     lookup' = if aussie then lookupAusTimeZone else lookupTimeZone
 
---Timestamp Parsers
-
+-- | Parse a rational number and interpret as seconds since the Epoch
 posixTime :: OptionedParser POSIXTime
 posixTime = isFlagSet RequirePosixUnit >>= lift . posixTime'
 
@@ -75,12 +77,13 @@ posixTime' requireS = do
     when requireS $ char 's' >> return ()
     return r
 
+-- | Given a LocalTime parser and a TimeZone Parser, parse a ZonedTime
 zonedTime :: OptionedParser LocalTime ->
              OptionedParser TimeZone ->
              OptionedParser ZonedTime
 zonedTime localT timeZone = do
     defaultToUTC <- isFlagSet DefaultToUTC
-    let timeZone'  = (option undefined $ lift space) >> timeZone
+    let timeZone'  = (option undefined $ lift skipSpace) >> timeZone
         mtimeZone  = if defaultToUTC
                      then (option utc timeZone')
                      else timeZone'
@@ -91,12 +94,13 @@ zonedTime localT timeZone = do
     makeBCE' (ZonedTime (LocalTime d t) tz) =
         makeBCE d >>= \d' -> return $ ZonedTime (LocalTime d' t) tz
 
+-- | Given a Date parser and a TimeOfDay parser, parse a LocalTime
 localTime :: OptionedParser Day ->
              OptionedParser TimeOfDay ->
              OptionedParser LocalTime
 localTime date time = do
     defaultToMidnight <- isFlagSet DefaultToMidnight
-    let time' = (lift $ char 'T' <|> space) >> time
+    let time' = (lift $ (const () <$> char 'T') <|> skipSpace) >> time
         mtime = if defaultToMidnight
                 then (option midnight time')
                 else time'
@@ -106,6 +110,8 @@ localTime date time = do
   where
     makeBCE' (LocalTime d t) = makeBCE d >>= \d' -> return $ LocalTime d' t
 
+-- | Parse an explicit timestamp, or a relative time
+-- (now, today, yesterday, tomorrow)
 extendTimestamp :: FromZonedTime a =>
                    OptionedParser a ->
                    OptionedParser ( ExtendedTimestamp a )
@@ -118,15 +124,19 @@ extendTimestamp p = either Timestamp id <$> eitherP p extendedTimestamp'
                     , stringCI "tomorrow"  >> return Tomorrow
                     ]
 
+-- | Parse an offset TimeZone or named TimeZone
 defaultTimeZone :: OptionedParser TimeZone
 defaultTimeZone = namedTimeZone <|> offsetTimeZone
 
+-- | Parse a LocalTime using defaultDay and defaultTime
 defaultLocalTime :: OptionedParser LocalTime
 defaultLocalTime = localTime defaultDayCE defaultTimeOfDay
 
+-- | Parse a zonedTime using defaultLocalTime and defaultTimeZone
 defaultZonedTime :: OptionedParser ZonedTime
 defaultZonedTime = zonedTime defaultLocalTime defaultTimeZone
 
+-- | Parse a Timestamp using posixTime or defaultZonedTime
 defaultTimestamp :: FromZonedTime a => OptionedParser a
 defaultTimestamp = fromZonedTime <$> defaultTimestamp'
   where
