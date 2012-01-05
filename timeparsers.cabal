@@ -27,7 +27,7 @@ Library
   Build-depends:
         base,
         bytestring,
-        attoparsec == 0.10.*,
+        attoparsec >= 0.10.1 && < 0.11,
         time,
         mtl,
         convertible == 1.0.*,
