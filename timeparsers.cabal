@@ -1,5 +1,5 @@
 Name:                timeparsers
-Version:             0.1
+Version:             0.2
 Synopsis:            Attoparsec parsers for various Date/Time formats.
 License:             BSD3
 License-file:        LICENSE
@@ -27,8 +27,8 @@ Library
   Build-depends:
         base,
         bytestring,
-        attoparsec,
+        attoparsec == 0.10.*,
         time,
         mtl,
-        convertible,
-        containers
+        convertible == 1.0.*,
+        containers >= 0.3 && < 0.5
