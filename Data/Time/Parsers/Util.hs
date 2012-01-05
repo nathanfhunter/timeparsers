@@ -18,15 +18,14 @@ module Data.Time.Parsers.Util ( nDigit
                               , module Data.Time.Parsers.Types
                               ) where
 
-import Data.Time.Parsers.Types
+import           Data.Time.Parsers.Types
 
-import Control.Applicative               ((<|>),(<$>),(<*),(*>))
-import Control.Monad.Reader
-import Data.Attoparsec.Char8
-import Data.Attoparsec.FastSet              (set)
+import           Control.Applicative     ((<|>),(<$>),(<*),(*>))
+import           Control.Monad.Reader
+import           Data.Attoparsec.Char8
 import qualified Data.ByteString.Char8   as B
-import Data.Set                          as Set (member, fromList)
-import Data.Time
+import           Data.Set                as Set (member, fromList)
+import           Data.Time
 
 -- | Parse a given number of digits
 nDigit :: (Read a, Num a) => Int -> Parser a
@@ -48,7 +47,7 @@ onlyParse p = p <* lift endOfInput
 -- Use flags MakeRecent, DefaultToUTC, DefaultToMidnight
 defaultOptions :: Options
 defaultOptions = Options { formats = [YMD,MDY,DMY]
-                         , seps = set ". /-"
+                         , seps = ". /-"
                          , flags = Set.fromList [ MakeRecent
                                                 , DefaultToUTC
                                                 , DefaultToMidnight
