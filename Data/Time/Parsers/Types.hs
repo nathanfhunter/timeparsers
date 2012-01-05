@@ -6,7 +6,6 @@ module Data.Time.Parsers.Types where
 
 import Control.Monad.Reader        (ReaderT)
 import Data.Attoparsec.Char8       (Parser)
-import Data.Attoparsec.FastSet     (FastSet)
 import Data.Convertible
 import Data.Convertible.Instances()
 import qualified Data.Set          as Set
@@ -75,7 +74,7 @@ data Flag
 
 data Options =
     Options { formats :: [DateFormat] -- ^ List of what DateFormats to try.
-            , seps    :: FastSet      -- ^ Set of accepted separators
+            , seps    :: String       -- ^ Set of accepted separators
             , flags   :: Set.Set Flag -- ^ Set of Flags
             }
 

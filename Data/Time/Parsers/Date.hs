@@ -13,18 +13,17 @@ module Data.Time.Parsers.Date ( yyyymmdd
                               , defaultDayCE
                               ) where
 
-import Data.Time.Parsers.Util
-import Data.Time.Parsers.Tables        (weekdays, months)
+import           Data.Time.Parsers.Util
+import           Data.Time.Parsers.Tables (weekdays, months)
 
-import Control.Applicative             ((<$>),(<*>),(<|>))
-import Control.Monad.Reader
-import Data.Attoparsec.Char8
-import Data.Attoparsec.FastSet
-import qualified Data.ByteString.Char8 as B
-import Data.Char                       (toLower)
-import Data.Map                        as M hiding (map)
-import Data.Time
-import Prelude                         hiding (takeWhile)
+import           Control.Applicative      ((<$>),(<*>),(<|>))
+import           Control.Monad.Reader
+import           Data.Attoparsec.Char8
+import qualified Data.ByteString.Char8    as B
+import           Data.Char                (toLower)
+import           Data.Map                 as M hiding (map)
+import           Data.Time
+import           Prelude                  hiding (takeWhile)
 
 
 lookupMonth :: B.ByteString -> Maybe Integer
@@ -147,10 +146,10 @@ tokenizedDate = do
     m <- isFlagSet MakeRecent
     lift $ tokenizedDate' s f m
 
-tokenizedDate' :: FastSet -> [DateFormat] -> Bool -> Parser Day
+tokenizedDate' :: String -> [DateFormat] -> Bool -> Parser Day
 tokenizedDate' seps' formats' makeRecent' = do
     a   <- dateToken
-    sep <- satisfy $ flip memberChar seps'
+    sep <- satisfy $ inClass seps'
     b   <- dateToken
     _   <- satisfy (==sep)
     c   <- numericDateToken
@@ -191,13 +190,13 @@ yearDayOfYear = do
     s <- asks seps
     lift $ yearDayOfYear' s
 
-yearDayOfYear' :: FastSet -> Parser Day
+yearDayOfYear' :: String -> Parser Day
 yearDayOfYear' seps' = do
     year <- nDigit 4
     day  <- maybeSep >> nDigit 3
     yearDayToDate year day
   where
-    maybeSep = option () $ satisfy (flip memberChar seps') >> return ()
+    maybeSep = option () $ satisfy (inClass seps') >> return ()
 
 -- | parse a julian day (days since 4713/1/1 BCE)
 -- Must prepend with "J", "JD", or "Julian"
