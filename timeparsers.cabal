@@ -6,6 +6,7 @@ License-file:        LICENSE
 Author:              Nathan Ferris Hunter
 Maintainer:          Nathan Ferris Hunter <nathan.f.hunter@gmail.com>
 Copyright:           Nathan Ferris Hunter, 2011
+Homepage:            https://github.com/nathanfhunter/timeparsers
 Stability:           Experimental
 Category:            Data
 Build-type:          Simple
