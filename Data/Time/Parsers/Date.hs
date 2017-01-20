@@ -22,7 +22,7 @@ import           Data.Attoparsec.Char8
 import qualified Data.ByteString.Char8    as B
 import           Data.Char                (toLower)
 import           Data.Map                 as M hiding (map)
-import           Data.Time
+import           Data.Time                hiding (months)
 import           Prelude                  hiding (takeWhile)
 
 
